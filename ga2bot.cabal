@@ -23,6 +23,11 @@ executable ga2bot
                      , natural-transformation >= 0.4
                      , comonad
                      , telegram-api
+                     , servant-client
                      , mtl
                      , transformers
                      , stm
+                     , http-client
+                     , http-client-tls
+                     , stm-containers
+                     , text
