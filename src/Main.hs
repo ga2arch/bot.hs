@@ -67,7 +67,7 @@ data Bot next  = Send T.Text next
                | Prompt T.Text (T.Text -> next)
   deriving (Functor)
 
-data Feeder next = Parse next
+data Feeder next = Subscribe T.Text next
   deriving (Functor, Show)
 
 data Youtube next = Download String next
@@ -79,23 +79,35 @@ send text = liftF . inj $ Send text ()
 prompt :: (Functor f, MonadFree f m, Bot :<: f) => T.Text -> m T.Text
 prompt name = liftF . inj $ Prompt name id
 
-parse :: (Functor f, MonadFree f m, Feeder :<: f) => m ()
-parse = liftF . inj $ Parse ()
+subscribe :: (Functor f, MonadFree f m, Feeder :<: f) => T.Text -> m ()
+subscribe url = liftF . inj $ Subscribe url ()
 
 download :: String -> (Functor f, MonadFree f m, Youtube :<: f) => m ()
 download url = liftF . inj $ Download url ()
 
 -- * Interpreters
 
-data User = User { userChan :: TChan TG.Message
-                 , userBot :: BotState
-                 , userChatId :: Int64
-                 }
+data FeederEvent = News String | SubscribeUrl String String (TChan FeederEvent)
+data YoutubeEvent = DownloadUrl String
+data CommandEvent = FE FeederEvent | YE YoutubeEvent
 
-newtype UserMonad a = UserMonad { runUser :: ReaderT User IO a }
-  deriving (Monad, Applicative, Functor, MonadReader User, MonadIO)
+subscribeUrl :: String -> String -> UserMonad (TChan FeederEvent)
+subscribeUrl chatId url = do
+  cmdChan <- asks userCmdChan
+  out <- liftIO newTChanIO
+  liftIO . atomically $ writeTChan cmdChan (FE $ SubscribeUrl chatId url out)
+  return out
 
-class (Functor f, Monad m, MonadReader User m) => Eval m f where
+data UserConfig = UserConfig { userChan :: TChan TG.Message
+                             , userBot :: BotState
+                             , userChatId :: Int64
+                             , userCmdChan :: TChan CommandEvent
+                             }
+
+newtype UserMonad a = UserMonad { runUser :: ReaderT UserConfig IO a }
+  deriving (Monad, Applicative, Functor, MonadReader UserConfig, MonadIO)
+
+class (Functor f, Monad m, MonadReader UserConfig m) => Eval m f where
   runAlgebra :: f (m a) -> m a
 
 instance Eval UserMonad Bot where
@@ -114,9 +126,19 @@ instance Eval UserMonad Bot where
     next text
 
 instance Eval UserMonad Feeder where
-  runAlgebra (Parse next) = do
-    liftIO $ print "parse"
+  runAlgebra (Subscribe url next) = do
+    config <- ask
+    chatId <- asks userChatId
+    newsChan <- subscribeUrl (show chatId) (T.unpack url)
+    _ <- liftIO . forkIO $ flip runReaderT config $ (runUser $ readNews newsChan)
     next
+   where
+    readNews newsChan = forever $ do
+      bot <- asks userBot
+      chatId <- asks userChatId
+      (News title) <- liftIO $ atomically $ readTChan newsChan
+      liftIO . (botRun bot) $ sendMessage chatId $ T.pack title
+      return ()
 
 instance Eval UserMonad Youtube where
   runAlgebra (Download url next) = do
@@ -126,19 +148,6 @@ instance Eval UserMonad Youtube where
 instance (Monad m, Eval m f, Eval m g) => Eval m (f :+: g) where
   runAlgebra (Inl r) = runAlgebra r
   runAlgebra (Inr r) = runAlgebra r
-
---run = iterM runAlgebra
-
--- * Plugins
-type Hello = Bot :+: Feeder :+: Youtube
-hello = do
-  send "hi, i'm the hello command"
-  name <- prompt "tell me your name: "
-  send $ "hi " <> name
-
-subscribe :: Int -> Free (Bot) ()
-subscribe url = do
-  send $ "the url: " <> (T.pack $ show url)
 
 -- * Servant like
 data Proxy a = Proxy
@@ -150,20 +159,13 @@ data (a :: k) :> (b :: *)
 infixr 9 :>
 
 data Capture (a :: *)
-data Done a
+data Run a
 
 type family Server layout :: *
-type instance Server (Done a) = Free a ()
+type instance Server (Run a) = Free a ()
 type instance Server ((s :: Symbol) :> r) = Server r
 type instance Server (a :<|> b) = Server a :<|> Server b
 type instance Server (Capture a :> r) = a -> Server r
-
-type Commands =
-  "/subscribe" :> Capture Int :> Done Bot
-  :<|> "/hello" :> Done Hello
-
-handleCommands :: Server Commands
-handleCommands = subscribe :<|> hello
 
 class HasServer layout where
   route :: Main.Proxy layout -> Server layout -> T.Text -> Maybe (UserMonad ())
@@ -173,8 +175,8 @@ serve p h xs = case route p h xs of
   Just m  -> m
   Nothing -> return ()
 
-instance (Functor f, Eval UserMonad f) => HasServer (Done f) where
-  route :: Main.Proxy (Done f) -> Free f () -> T.Text -> Maybe (UserMonad ())
+instance (Functor f, Eval UserMonad f) => HasServer (Run f) where
+  route :: Main.Proxy (Run f) -> Free f () -> T.Text -> Maybe (UserMonad ())
   route _ handler msg = Just $ iterM runAlgebra handler
 
 instance (HasServer a, HasServer b) => HasServer (a :<|> b) where
@@ -185,26 +187,43 @@ instance (HasServer a, HasServer b) => HasServer (a :<|> b) where
 
 instance (KnownSymbol s, HasServer r) => HasServer ((s :: Symbol) :> r) where
   route :: Main.Proxy (s :> r) -> Server r -> T.Text -> Maybe (UserMonad ())
-  route _ handler text
-    | symbolVal (Main.Proxy :: Main.Proxy s) `isPrefixOf` (T.unpack text) = do
-        let prefix = T.pack $ symbolVal (Main.Proxy :: Main.Proxy s)
-        route (Main.Proxy :: Main.Proxy r) handler $ T.drop 1 $ fromJust $ T.stripPrefix prefix text
-  route _ _       _                     = Nothing
+  route _ handler text = do
+    let prefix = T.pack $ symbolVal (Main.Proxy :: Main.Proxy s)
+    if prefix `T.isPrefixOf` text
+      then route (Main.Proxy :: Main.Proxy r) handler $ fromJust $ T.stripPrefix prefix text
+      else Nothing
 
 instance (Read a, HasServer r) => HasServer (Capture a :> r) where
   route :: Main.Proxy (Capture a :> r) -> (a -> Server r) -> T.Text -> Maybe (UserMonad ())
   route _ handler text = do
     a <- readMaybe $ T.unpack text
     route (Main.Proxy :: Main.Proxy r) (handler a) text
-  route _ _       _        = Nothing
 
 instance {-# OVERLAPPING #-} (HasServer r) => HasServer (Capture T.Text :> r) where
   route :: Main.Proxy (Capture T.Text :> r) -> (T.Text -> Server r) -> T.Text -> Maybe (UserMonad ())
   route _ handler text | T.length text > 0 = route (Main.Proxy :: Main.Proxy r) (handler text) text
   route _ _       _        = Nothing
 
--- * Bot
+-- * Commands
+type HelloCmd = Bot
+hello = do
+  send "hi, i'm the hello command"
+  name <- prompt "tell me your name: "
+  send $ "hi " <> name
 
+type SubscribeCmd = Bot :+: Feeder
+subscribeCmd url = do
+  subscribe url
+  send $ "the url: " <> url
+
+type Commands =
+  "/subscribe" :> Capture T.Text :> Run SubscribeCmd
+  :<|> "/hello" :> Run HelloCmd
+
+handleCommands :: Server Commands
+handleCommands = subscribeCmd :<|> hello
+
+-- * Bot
 getUpdates token manager lastId f = do
   updates <- TG.getUpdates token lastId (Just 20) (Just 10) manager
   case updates of
@@ -220,7 +239,9 @@ getUpdates token manager lastId f = do
 
 data BotState = BotState {
   botUsers :: M.Map Int (TChan TG.Message)
-, botRun :: forall a. (TG.TelegramClient a) -> IO (Either ServantError a)}
+  , botCmdChan :: TChan CommandEvent
+  , botRun :: forall a. (TG.TelegramClient a) -> IO (Either ServantError a)
+  }
 
 dispatch :: TG.Update -> ReaderT BotState IO ()
 dispatch TG.Update{..} = onMessage message
@@ -237,8 +258,11 @@ dispatch TG.Update{..} = onMessage message
          return ()
        Nothing  -> do
          botState <- ask
+         cmdChan <- asks botCmdChan
+         cmdChan' <- liftIO . atomically $ dupTChan cmdChan
          chan <- liftIO $ newTChanIO
-         _ <- liftIO . forkIO $ runReaderT (runUser processMessage) $ User chan botState chatId
+         _ <- liftIO . forkIO $ runReaderT (runUser processMessage) $
+           UserConfig chan botState chatId cmdChan'
          liftIO . atomically $ do
            M.insert chan user_id users
            writeTChan chan m
@@ -267,11 +291,25 @@ processMessage = forever $ do
     return ()
   go _ = return ()
 
+feeder chan = do
+  _ <- forkIO $ forever $ do
+    event <- atomically $ readTChan chan
+    case event of
+      (FE (SubscribeUrl chatId url out)) -> onSubscribe chatId url out
+
+  forever $ do
+    threadDelay 10000000
+    print "checking"
+  where
+   onSubscribe chatId url out = atomically $ writeTChan out $ News "prova"
+
 main = do
   let token = TG.Token "bot130053600:AAFKjzm0YiyVBQa8mYfKkNNXTJ8mDd2zhgI"
   users <- M.newIO
   manager <- newManager tlsManagerSettings
-  let botState = BotState users $ flip (flip TG.runClient token) manager
+  cmdChan <- newTChanIO
+  forkIO $ feeder cmdChan
+  let botState = BotState users cmdChan $ flip (flip TG.runClient token) manager
   go token $ \m -> runReaderT (dispatch m) botState
  where
   go token f = do
