@@ -31,3 +31,8 @@ executable ga2bot
                      , http-client-tls
                      , stm-containers
                      , text
+                     , hedis
+                     , feed
+                     , bytestring
+                     , exceptions
+                     , network-uri
