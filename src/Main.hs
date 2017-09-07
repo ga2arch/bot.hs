@@ -35,6 +35,8 @@ import Data.Int
 import GHC.TypeLits
 import Text.Feed.Import
 import Text.Feed.Types
+import Network.HTTP.Types.Header
+import qualified Data.CaseInsensitive as CI
 import qualified Text.Atom.Feed as Atom
 import qualified Text.RSS.Syntax as RSS
 import qualified Text.RSS1.Syntax as RSS1
@@ -134,6 +136,7 @@ data Bot next  = Send T.Text next
   deriving (Functor)
 
 data Feeder next = Subscribe (TChan FeederEvent) T.Text next
+                 | Validate T.Text (Bool -> next)
   deriving (Functor)
 
 data Youtube next = Download String next
@@ -148,6 +151,9 @@ prompt name = liftF . inj $ Prompt name id
 subscribe :: (?inChan :: TChan FeederEvent, Functor f, MonadFree f m, Feeder :<: f) => T.Text -> m ()
 subscribe url = liftF . inj $ Subscribe ?inChan url ()
 
+validate :: (Functor f, MonadFree f m, Feeder :<: f) => T.Text -> m Bool
+validate url = liftF . inj $ Validate url id
+
 download :: String -> (Functor f, MonadFree f m, Youtube :<: f) => m ()
 download url = liftF . inj $ Download url ()
 
@@ -157,8 +163,8 @@ data FeederEvent = News String | SubscribeUrl Int64 T.Text
 data YoutubeEvent = DownloadUrl String
 data CommandEvent = FE FeederEvent | YE YoutubeEvent
 
-subscribeUrl :: TChan FeederEvent -> Int64 -> T.Text -> UserMonad ()
-subscribeUrl inChan chatId url =
+subscribe' :: TChan FeederEvent -> Int64 -> T.Text -> UserMonad ()
+subscribe' inChan chatId url =
   liftIO . atomically $ writeTChan inChan (SubscribeUrl chatId url)
 
 data UserConfig = UserConfig { userChan :: TChan TG.Message
@@ -197,8 +203,20 @@ instance Eval UserMonad Feeder where
   runAlgebra (Subscribe inChan url next) = do
     config <- ask
     chatId <- asks userChatId
-    subscribeUrl inChan chatId url
+    subscribe' inChan chatId url
     next
+
+  runAlgebra (Validate url next) = do
+      if (isURI (T.unpack url))
+        then do
+        manager <- liftIO $ newManager tlsManagerSettings
+        request <- liftIO $ parseRequest (T.unpack url)
+        response <- liftIO $ httpNoBody request manager
+        let headers = responseHeaders response
+        case find ((== hContentType).fst) headers of
+          Just header -> next $ "xml" `C.isInfixOf` (snd header)
+          Nothing -> next False
+        else next False
 
 instance Eval UserMonad Youtube where
   runAlgebra (Download url next) = do
@@ -219,7 +237,8 @@ hello = do
 type SubscribeCmd = Bot :+: Feeder
 subscribeCmd :: (?inChan :: TChan FeederEvent) => T.Text -> Free SubscribeCmd ()
 subscribeCmd url = do
-  if isURI $ T.unpack url
+  valid <- validate url
+  if valid
     then do
       subscribe url
       send $ "subscribed to: " <> url
@@ -378,7 +397,7 @@ feeder config = do
      lastKnownTitle <- R.runRedis conn $ R.get ("feed:" <> url <> ":last")
      case lastKnownTitle of
        Right (Just title) -> when (firstTitle /= title) $ do
-         sendMessages conn config url rssItems
+         sendMessages conn config url $ takeWhile (\x -> (C.pack $ fromJust $ RSS.rssItemLink x) /= title) rssItems
          updateLastSeen conn url rssItems
        Right Nothing  -> updateLastSeen conn url rssItems
        Left x -> return ()

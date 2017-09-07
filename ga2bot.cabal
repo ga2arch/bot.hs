@@ -36,3 +36,5 @@ executable ga2bot
                      , bytestring
                      , exceptions
                      , network-uri
+                     , http-types
+                     , case-insensitive
