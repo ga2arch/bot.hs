@@ -7,7 +7,7 @@ import Bot.Types
 import Bot.Command.Types
 import Bot.Command.Endpoints
 import Bot.Command.Feeder.Types
-import Bot.Command.Feeder.Feeder
+import Bot.Command.Feeder
 
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TChan
