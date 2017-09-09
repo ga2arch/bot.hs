@@ -38,3 +38,12 @@ executable ga2bot
                      , network-uri
                      , http-types
                      , case-insensitive
+                     , persistent
+                     , persistent-sqlite
+                     , persistent-template
+                     , esqueleto
+                     , resource-pool
+                     , time
+                     , monad-logger
+                     , monad-control
+                     , transformers-base

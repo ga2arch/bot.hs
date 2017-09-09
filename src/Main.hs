@@ -1,6 +1,7 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Bot
+import Data.Text
+import System.Environment
 
-main = runBot "bot130053600:AAFKjzm0YiyVBQa8mYfKkNNXTJ8mDd2zhgI"
+main = getEnv "TOKEN" >>= runBot . pack

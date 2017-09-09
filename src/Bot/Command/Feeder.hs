@@ -4,11 +4,13 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ViewPatterns #-}
 module Bot.Command.Feeder where
 
 import Bot.Types
 import Bot.Command.Types
 import Bot.Command.Feeder.Types
+import Bot.Command.Feeder.Database
 import Bot.Command.Base
 import Bot.Command.Base.Types
 
@@ -21,6 +23,7 @@ import Control.Concurrent.STM
 import Control.Concurrent.STM.TChan
 import Data.Int
 import Data.Monoid
+import Database.Persist (entityVal)
 import Data.Maybe
 import Data.List
 import Text.Feed.Import
@@ -86,80 +89,65 @@ subscribeCommand url = do
     else do
       send "invalid url"
 
-
-feeder config = do
-  inChan <- newTChanIO
-  conn <- R.checkedConnect R.defaultConnectInfo
+feeder :: TelegramConfig -> IO (TChan FeederEvent)
+feeder botConfig = do
+  feederChan <- newTChanIO
+  pool <- initDb
   manager <- newManager tlsManagerSettings
+  let feederConfig = FeederConfig pool botConfig manager
 
-  _ <- forkIO $ forever $ do
-    event <- atomically $ readTChan inChan
+  liftIO . forkIO . forever $ do
+    event <- atomically $ readTChan feederChan
     case event of
-      (SubscribeUrl chatId url) -> onSubscribe conn config chatId url
+      (SubscribeUrl userId url) -> runReaderT (runFeeder $ onSubscribe userId url) feederConfig
 
-  forkIO . forever $ do
+  liftIO . forkIO . forever $ do
     print "checking feed"
-    checkFeeds conn config manager
+    runReaderT (runFeeder checkFeeds) feederConfig
     threadDelay 10000000
 
-  return inChan
+  return feederChan
   where
-   onSubscribe conn config chatId url = do
+   onSubscribe userId url = do
      let url' = T.encodeUtf8 url
-     R.runRedis conn $ do
-       R.sadd "feeds" [url']
-       R.sadd ("feed:" <> url') [C.pack $ show chatId]
+     addSubscription (show userId) url
+     return url'
 
-   checkFeeds conn config manager = do
-     (Right urls) <- R.runRedis conn $ R.smembers "feeds"
-     forM_ urls $ \url ->
+   checkFeeds = do
+     feeds <- getFeeds
+     forM_ feeds $ \feed ->
                     catchAll
-                    (loadFeed conn config manager url)
-                    (\ex -> do
-                        (Right users) <- R.runRedis conn $ R.lrange ("feed:" <> url) 0 (-1)
-                        forM_ users $ \user -> do
-                          let message = "error processing " <> T.decodeUtf8 url <> " unsubscribing"
-                          call config $ sendMessage (read $ C.unpack user) message
-                        R.runRedis conn $ do
-                          R.srem "feeds" [url]
-                          R.del [("feed:" <> url)]
-                          return ())
+                    (loadFeed feed)
+                    (\ex -> return ())
 
-   loadFeed conn config manager url = do
-     print $ "loading " ++ C.unpack url
-     request <- parseRequest $ C.unpack url
-     response <- httpLbs request manager
+   loadFeed feed@(entityVal -> (Feed feedUrl feedUpdateDate)) = do
+     manager <- asks fManager
+     liftIO $ print $ "loading " ++ (T.unpack feedUrl)
+     request <- liftIO $ parseRequest $ T.unpack feedUrl
+     response <- liftIO $ httpLbs request manager
      case parseFeedSource $ responseBody response of
-       Just feed -> processFeed conn config url feed
+       Just content -> processFeed feed content
        Nothing -> return ()
 
-   processFeed conn config url (AtomFeed Atom.Feed{..}) = undefined
-   processFeed conn config url (RSSFeed RSS.RSS{rssChannel=RSS.RSSChannel{..}}) = do
+   processFeed feed (AtomFeed Atom.Feed{..}) = undefined
+   processFeed feed@(entityVal -> Feed feedUrl lastGuid) (RSSFeed RSS.RSS{rssChannel=RSS.RSSChannel{..}}) = do
      let firstGuid = rssGuid $ head rssItems
-     oldFirstGuid <- R.runRedis conn $ R.get ("feed:" <> url <> ":last")
-     case oldFirstGuid of
-       Right (Just guid) -> do
-         sendMessages conn config url $
-           takeWhile (\item -> (rssGuid item) /= guid) rssItems
-         updateLastSeen conn url rssItems
-       Right Nothing  -> updateLastSeen conn url rssItems
-       Left x -> return ()
+     when (isJust lastGuid) $ do
+       users <- getUsersByFeed feed
+       sendMessages users $
+         takeWhile (\item -> (rssGuid item) /= (fromJust lastGuid)) rssItems
+     updateLastGuid feed (rssGuid $ head rssItems)
 
-   sendMessages conn config url rssItems = do
-     (Right users) <- R.runRedis conn $ R.smembers ("feed:" <> url)
+   sendMessages users rssItems = do
      forM_ rssItems $ \RSS.RSSItem{..} -> do
        let title = T.pack $ fromJust rssItemTitle
        let url = T.pack $ fromJust rssItemLink
        let message = title <> "\n\n" <> url
-       forM_ users $ \user ->
-         call config $ sendMessage (read $ C.unpack user) message
+       forM_ users $ \(entityVal -> User userId) ->
+         call $ sendMessage (read userId) message
 
-   updateLastSeen conn url rssItems = do
-     R.runRedis conn $ do
-       let firstGuid = rssGuid $ head rssItems
-       R.set ("feed:" <> url <> ":last") firstGuid
-       return ()
+   rssGuid = T.pack . RSS.rssGuidValue . fromJust . RSS.rssItemGuid
 
-   rssGuid = C.pack . RSS.rssGuidValue . fromJust . RSS.rssItemGuid
-
-   call config action = liftIO $ TG.runClient action (tgToken config) (tgManager config)
+   call action = do
+     config <- asks fTelegramConfig
+     liftIO $ TG.runClient action (tgToken config) (tgManager config)
