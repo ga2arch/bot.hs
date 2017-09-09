@@ -4,6 +4,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Bot.Command.Feeder.Types where
 
+import           Bot.Command.Feeder.Database.Types
 import           Bot.Command.Types
 import           Bot.Types
 import           Control.Concurrent.STM.TChan
@@ -14,16 +15,23 @@ import           Control.Monad.Reader
 import           Control.Monad.Trans.Control
 import           Data.Int
 import           Data.Pool (Pool)
+import           Database.Persist.Sql (Entity)
 import           Database.Persist.Sql (SqlBackend)
 import           Network.HTTP.Client (Manager)
 
 import qualified Data.ByteString.Char8 as C
 import qualified Data.Text as T
 
-data FeederEvent = News String | SubscribeUrl Int64 T.Text
+data FeederEvent = News String
+                 | SubscribeUrl Int64 T.Text
+                 | UnsubscribeUrl Int64 T.Text
+                 | ListFeeds String (TChan FeederEvent)
+                 | Feeds [Entity Feed]
 
 data Feeder next = Subscribe (TChan FeederEvent) T.Text next
+                 | Unsubscribe (TChan FeederEvent) T.Text next
                  | Validate T.Text (Bool -> next)
+                 | GetFeeds (TChan FeederEvent) ([Entity Feed] -> next)
   deriving (Functor)
 
 data FeederConfig = FeederConfig { fPool :: Pool SqlBackend

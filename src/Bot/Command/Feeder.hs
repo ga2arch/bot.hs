@@ -10,6 +10,7 @@ module Bot.Command.Feeder where
 import           Bot.Command.Base
 import           Bot.Command.Base.Types
 import           Bot.Command.Feeder.Database
+import           Bot.Command.Feeder.Database.Types
 import           Bot.Command.Feeder.Types
 import           Bot.Command.Types
 import           Bot.Types
@@ -24,7 +25,7 @@ import           Data.Int
 import           Data.List
 import           Data.Maybe
 import           Data.Monoid
-import           Database.Persist (entityVal)
+import           Database.Persist (entityVal, Entity)
 import           Network.HTTP.Client
 import           Network.HTTP.Client.TLS
 import           Network.HTTP.Types.Header
@@ -48,22 +49,40 @@ import qualified Web.Telegram.API.Bot.Data as TG
 import qualified Web.Telegram.API.Bot.Requests as TG
 import qualified Web.Telegram.API.Bot.Responses as TG
 
-subscribe :: (?feederChan :: TChan FeederEvent, Functor f, MonadFree f m, Feeder :<: f) => T.Text -> m ()
+subscribe :: (?feederChan :: TChan FeederEvent, Functor f, MonadFree f m, Feeder :<: f)
+          => T.Text -> m ()
 subscribe url = liftF . inj $ Subscribe ?feederChan url ()
+
+unsubscribe :: (?feederChan :: TChan FeederEvent, Functor f, MonadFree f m, Feeder :<: f)
+          => T.Text -> m ()
+unsubscribe url = liftF . inj $ Unsubscribe ?feederChan url ()
 
 validate :: (Functor f, MonadFree f m, Feeder :<: f) => T.Text -> m Bool
 validate url = liftF . inj $ Validate url id
 
-subscribe' :: TChan FeederEvent -> Int64 -> T.Text -> UserMonad ()
-subscribe' feederChan userId url =
-  liftIO . atomically $ writeTChan feederChan (SubscribeUrl userId url)
+getFeeds :: (?feederChan :: TChan FeederEvent, Functor f, MonadFree f m, Feeder :<: f)
+         => m ([Entity Bot.Command.Feeder.Database.Types.Feed])
+getFeeds = liftF . inj $ GetFeeds ?feederChan id
 
 instance Eval UserMonad Feeder where
-  runAlgebra (Subscribe inChan url next) = do
+  runAlgebra (Subscribe feederChan url next) = do
     config <- ask
-    chatId <- asks userChatId
-    subscribe' inChan chatId url
+    userId <- asks userChatId
+    liftIO . atomically $ writeTChan feederChan (SubscribeUrl userId url)
     next
+
+  runAlgebra (Unsubscribe feederChan url next) = do
+    config <- ask
+    userId <- asks userChatId
+    liftIO . atomically $ writeTChan feederChan (UnsubscribeUrl userId url)
+    next
+
+  runAlgebra (GetFeeds feederChan next) = do
+    chan <- liftIO newTChanIO
+    userId <- asks userChatId
+    liftIO . atomically $ writeTChan feederChan (ListFeeds (show userId) chan)
+    (Feeds feeds) <- liftIO . atomically $ readTChan chan
+    next feeds
 
   runAlgebra (Validate url next) = do
     if (isURI (T.unpack url))
@@ -77,7 +96,6 @@ instance Eval UserMonad Feeder where
           Nothing -> next False
       else next False
 
-
 subscribeCommand :: (?feederChan :: TChan FeederEvent) => T.Text -> Free (Base :+: Feeder) ()
 subscribeCommand url = do
   valid <- validate url
@@ -88,6 +106,20 @@ subscribeCommand url = do
     else do
       send "invalid url"
 
+listCommand :: (?feederChan :: TChan FeederEvent) => Free (Base :+: Feeder) ()
+listCommand = do
+  feeds <- getFeeds
+  if (null feeds)
+    then send "You don't have any subscription"
+    else do
+      let urls = map (\(entityVal -> (Feed url _)) -> url) feeds
+      send $ "You are subscribed to: \n" <> T.intercalate "\n" urls
+
+unsubscribeCommand :: (?feederChan :: TChan FeederEvent) => T.Text -> Free (Base :+: Feeder) ()
+unsubscribeCommand url = do
+  unsubscribe url
+  send "unsubscribed"
+
 feeder :: TelegramConfig -> IO (TChan FeederEvent)
 feeder botConfig = do
   feederChan <- newTChanIO
@@ -97,8 +129,10 @@ feeder botConfig = do
 
   liftIO . forkIO . forever $ do
     event <- atomically $ readTChan feederChan
-    case event of
-      (SubscribeUrl userId url) -> runReaderT (runFeeder $ onSubscribe userId url) feederConfig
+    runReaderT (runFeeder (case event of
+      SubscribeUrl userId url -> onSubscribe userId url
+      ListFeeds userId chan -> onListFeeds userId chan
+      UnsubscribeUrl userId url ->  onUnsubscribe userId url)) feederConfig
 
   liftIO . forkIO . forever $ do
     print "checking feed"
@@ -110,14 +144,31 @@ feeder botConfig = do
    onSubscribe userId url = do
      let url' = T.encodeUtf8 url
      addSubscription (show userId) url
-     return url'
+     return ()
+
+   onUnsubscribe userId url = do
+     let url' = T.encodeUtf8 url
+     removeSubscription (show userId) url
+     return ()
+
+   onListFeeds userId chan = do
+     feeds <- loadFeedsByUser userId
+     liftIO . atomically $ writeTChan chan (Feeds feeds)
+     return ()
 
    checkFeeds = do
-     feeds <- getFeeds
+     feeds <- loadFeeds
      forM_ feeds $ \feed ->
                     catchAll
                     (loadFeed feed)
-                    (\ex -> return ())
+                    (\ex -> onFeedError ex feed)
+
+   onFeedError ex feed@(entityVal -> Feed feedUrl _) = do
+     users <- loadUsersByFeed feed
+     forM_ users $ \(entityVal -> User userId) ->
+         call $ sendMessage (read userId)
+                            ("error processing feed: " <> feedUrl <> " unsubscribing")
+     removeFeed feed
 
    loadFeed feed@(entityVal -> (Feed feedUrl feedUpdateDate)) = do
      manager <- asks fManager
@@ -132,7 +183,7 @@ feeder botConfig = do
    processFeed feed@(entityVal -> Feed feedUrl lastGuid) (RSSFeed RSS.RSS{rssChannel=RSS.RSSChannel{..}}) = do
      let firstGuid = rssGuid $ head rssItems
      when (isJust lastGuid) $ do
-       users <- getUsersByFeed feed
+       users <- loadUsersByFeed feed
        sendMessages users $
          takeWhile (\item -> (rssGuid item) /= (fromJust lastGuid)) rssItems
      updateLastGuid feed (rssGuid $ head rssItems)
@@ -149,4 +200,4 @@ feeder botConfig = do
 
    call action = do
      config <- asks fTelegramConfig
-     liftIO $ TG.runClient action (tgToken config) (tgManager config)
+     void $ liftIO $ TG.runClient action (tgToken config) (tgManager config)

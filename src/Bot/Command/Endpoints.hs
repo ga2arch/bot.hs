@@ -81,6 +81,8 @@ serve p h xs = case route p h xs of
 -- * Endpoints
 type Commands =
   "/subscribe" :> Capture T.Text :> Run (Base :+: Feeder)
+  :<|>  "/unsubscribe" :> Capture T.Text :> Run (Base :+: Feeder)
+  :<|> "/list" :> Run (Base :+: Feeder)
 
 handleCommands :: (?feederChan :: TChan FeederEvent) => Server Commands
-handleCommands = subscribeCommand
+handleCommands = subscribeCommand :<|> unsubscribeCommand :<|> listCommand
