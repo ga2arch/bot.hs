@@ -14,7 +14,7 @@ import Data.Text
 type Commands =
   "/subscribe" :> Capture Text "url" :> Run (Base :+: Feeder) "subscribe to the url"
   :<|>  "/unsubscribe" :> Capture Text "url" :> Run (Base :+: Feeder) "unsubscribe from the url"
-  :<|> "/list" :> Run (Base :+: Feeder) "lists all subscriptions"
+  :<|> "/list" :> Run (Base :+: Feeder) "list all subscriptions"
 
 handleCommands :: (?feederChan :: TChan FeederEvent) => Server Commands
 handleCommands = subscribeCommand :<|> unsubscribeCommand :<|> listCommand
