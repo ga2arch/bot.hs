@@ -72,8 +72,11 @@ getUsersByFeed feed = do
 addSubscription :: (MonadReader FeederConfig m, MonadBaseControl IO m, MonadIO m) => String -> Text -> m (Key Subscription)
 addSubscription userId url = do
   pool <- asks fPool
-  user <- flip runSqlPool pool $ selectFirst [UserUserId ==. userId] []
-  feed <- flip runSqlPool pool $ selectFirst [FeedUrl ==. url] []
+  (user,feed) <- flip runSqlPool pool $ do
+    user <- selectFirst [UserUserId ==. userId] []
+    feed <- selectFirst [FeedUrl ==. url] []
+    return (user, feed)
+
   subscribe userId url user feed
  where
    subscribe _ _ (Just user) (Just feed) = do
