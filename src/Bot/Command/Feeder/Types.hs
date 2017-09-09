@@ -26,9 +26,10 @@ data Feeder next = Subscribe (TChan FeederEvent) T.Text next
                  | Validate T.Text (Bool -> next)
   deriving (Functor)
 
-data FeederConfig = FeederConfig {fPool :: Pool SqlBackend,
-                                  fTelegramConfig :: TelegramConfig,
-                                  fManager :: Manager}
+data FeederConfig = FeederConfig { fPool :: Pool SqlBackend
+                                 , fTelegramConfig :: TelegramConfig
+                                 , fManager :: Manager
+                                 }
 
 newtype FeederMonad a = FeederMonad { runFeeder :: ReaderT FeederConfig IO a }
   deriving (Functor, Applicative, Monad, MonadReader FeederConfig,

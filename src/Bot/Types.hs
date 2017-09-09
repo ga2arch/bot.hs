@@ -13,15 +13,13 @@ import qualified Web.Telegram.API.Bot.API as TG
 import qualified STMContainers.Map as M
 
 
-data BotConfig = BotConfig {
-  botUsers :: M.Map Int (TChan TG.Message)
-  , channelConfig :: TelegramConfig
-  }
+data BotConfig = BotConfig { botUsers :: M.Map Int (TChan TG.Message)
+                           , channelConfig :: TelegramConfig
+                           }
 
-data TelegramConfig = TelegramConfig {
-  tgToken :: TG.Token
-  , tgManager :: Manager
-  }
+data TelegramConfig = TelegramConfig { tgToken :: TG.Token
+                                     , tgManager :: Manager
+                                     }
 
 data UserConfig = UserConfig { userChan :: TChan TG.Message
                              , userBot :: BotConfig
