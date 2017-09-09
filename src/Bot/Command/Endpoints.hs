@@ -9,6 +9,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE OverloadedStrings  #-}
 module Bot.Command.Endpoints where
 
 import           Bot.Command
@@ -70,7 +71,8 @@ instance (Read a, HasServer r) => HasServer (Capture a :> r) where
 
 instance {-# OVERLAPPING #-} (HasServer r) => HasServer (Capture T.Text :> r) where
   type Server (Capture T.Text :> r) = T.Text -> Server r
-  route Proxy handler text | T.length text > 0 = route (Proxy :: Proxy r) (handler text) text
+  route Proxy handler text | T.length text > 0 =
+    route (Proxy :: Proxy r) (handler text) (fst $ T.breakOn " " text)
   route _ _       _        = Nothing
 
 serve :: (HasServer layout) => Proxy layout -> Server layout -> T.Text -> UserMonad ()
