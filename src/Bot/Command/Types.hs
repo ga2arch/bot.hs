@@ -18,6 +18,7 @@ import           Control.Concurrent.STM.TChan
 import           Control.Monad.Free
 import           Control.Monad.Reader
 import           Data.Maybe
+import           Data.Monoid
 import           Data.Proxy
 import           Data.Text (Text)
 import           GHC.TypeLits
@@ -59,13 +60,12 @@ infixr 8 :<|>
 data (a :: k) :> (b :: *)
 infixr 9 :>
 
-data Capture (a :: *)
-data Run a
+data Capture (a :: *) (tag :: Symbol)
+data Run a (desc :: Symbol)
 
 class HasServer api where
   type Server api :: *
   route :: Proxy api -> Server api -> T.Text -> Maybe (UserMonad ())
---  help :: Proxy api -> Server api -> [T.Text]
 
 instance (HasServer a, HasServer b) => HasServer (a :<|> b) where
   type Server (a :<|> b) = Server a :<|> Server b
@@ -73,12 +73,10 @@ instance (HasServer a, HasServer b) => HasServer (a :<|> b) where
     where
       pa = Proxy :: Proxy a
       pb = Proxy :: Proxy b
---  help Proxy (handlera :<|> handlerb) = help (Proxy :: Proxy a) handlera
---    <|> help (Proxy :: Proxy b) handlerb
 
-instance (Functor f, Eval UserMonad f) => HasServer (Run f) where
-  type Server (Run f) = Free f ()
-  route Proxy handler msg = Just $ iterM runAlgebra handler
+instance (Functor f, Eval UserMonad f) => HasServer (Run f (desc :: Symbol)) where
+  type Server (Run f b) = Free f ()
+  route Proxy handler text = Just $ iterM runAlgebra handler
 
 instance (KnownSymbol s, HasServer r) => HasServer ((s :: Symbol) :> r) where
   type Server (s :> r) = Server r
@@ -88,8 +86,8 @@ instance (KnownSymbol s, HasServer r) => HasServer ((s :: Symbol) :> r) where
       then route (Proxy :: Proxy r) handler $ T.drop 1 $ fromJust $ T.stripPrefix prefix text
       else Nothing
 
-instance (Read a, HasServer r) => HasServer (Capture a :> r) where
-  type Server (Capture a :> r) = a -> Server r
+instance (Read a, KnownSymbol tag, HasServer r) => HasServer (Capture a (tag :: Symbol) :> r) where
+  type Server (Capture a b :> r) = a -> Server r
   route Proxy handler text = do
     a <- readMaybe $ T.unpack text
     route (Proxy :: Proxy r) (handler a) text
@@ -99,6 +97,24 @@ instance {-# OVERLAPPING #-} (HasServer r) => HasServer (Capture T.Text :> r) wh
   route Proxy handler text | T.length text > 0 =
     route (Proxy :: Proxy r) (handler text) (fst $ T.breakOn " " text)
   route _ _       _        = Nothing
+
+-- * Help
+class HasHelp api where
+  help :: Proxy api -> T.Text -> T.Text
+
+instance (HasHelp a, HasHelp b) => HasHelp (a :<|> b) where
+  help Proxy acc = help (Proxy :: Proxy a) acc <> help (Proxy :: Proxy b) acc
+
+instance (Functor f, KnownSymbol desc, Eval UserMonad f) => HasHelp (Run f (desc :: Symbol)) where
+  help Proxy acc = acc <> " " <> (T.pack $ symbolVal (Proxy :: Proxy desc)) <> "\n"
+
+instance (KnownSymbol s, HasHelp r) => HasHelp ((s :: Symbol) :> r) where
+  help Proxy acc =
+    help (Proxy :: Proxy r) (acc <> (T.pack $ symbolVal (Proxy :: Proxy s)))
+
+instance (Read a, KnownSymbol tag, HasHelp r) => HasHelp (Capture a (tag :: Symbol) :> r) where
+  help Proxy acc =
+    help (Proxy :: Proxy r) (acc <> " <" <> (T.pack $ symbolVal (Proxy :: Proxy tag)) <> ">")
 
 serve :: (HasServer layout) => Proxy layout -> Server layout -> T.Text -> UserMonad ()
 serve p h xs = case route p h xs of

@@ -18,6 +18,7 @@ import           Network.HTTP.Client
 import           Network.HTTP.Client.TLS
 
 import qualified Data.Proxy as P
+import qualified Data.Text as T
 import qualified STMContainers.Map as M
 import qualified Web.Telegram.API.Bot.API as TG
 import qualified Web.Telegram.API.Bot.API.Updates as TG
@@ -57,9 +58,27 @@ processMessage = forever $ do
   go m
  where
   go TG.Message{chat=TG.Chat{chat_id=chatId}, text=Just text} = do
-    serve (P.Proxy :: P.Proxy Commands) handleCommands text
+    case text of
+      "/help" -> void $ call $ sendMessage chatId $ help (P.Proxy :: P.Proxy Commands) T.empty
+      _ -> serve (P.Proxy :: P.Proxy Commands) handleCommands text
     return ()
   go _ = return ()
+
+sendMessage chatId text = do
+   TG.sendMessageM TG.SendMessageRequest {
+      message_chat_id = TG.ChatId chatId,
+      message_text = text,
+      message_parse_mode = Nothing,
+      message_disable_web_page_preview = Just True,
+      message_disable_notification = Nothing,
+      message_reply_to_message_id = Nothing,
+      message_reply_markup = Nothing
+      }
+
+call action = do
+  botConfig <- asks userBot
+  let config = channelConfig botConfig
+  liftIO $ TG.runClient action (tgToken config) (tgManager config)
 
 runBot tk = do
   let token = TG.Token ("bot" <> tk)

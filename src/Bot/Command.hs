@@ -12,9 +12,9 @@ import Control.Concurrent.STM.TChan
 import Data.Text
 
 type Commands =
-  "/subscribe" :> Capture Text :> Run (Base :+: Feeder)
-  :<|>  "/unsubscribe" :> Capture Text :> Run (Base :+: Feeder)
-  :<|> "/list" :> Run (Base :+: Feeder)
+  "/subscribe" :> Capture Text "url" :> Run (Base :+: Feeder) "subscribe to the url"
+  :<|>  "/unsubscribe" :> Capture Text "url" :> Run (Base :+: Feeder) "unsubscribe from the url"
+  :<|> "/list" :> Run (Base :+: Feeder) "lists all subscriptions"
 
 handleCommands :: (?feederChan :: TChan FeederEvent) => Server Commands
 handleCommands = subscribeCommand :<|> unsubscribeCommand :<|> listCommand
