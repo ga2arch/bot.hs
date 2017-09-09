@@ -4,7 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Bot where
 
-import           Bot.Command.Endpoints
+import           Bot.Command
 import           Bot.Command.Feeder
 import           Bot.Command.Feeder.Types
 import           Bot.Command.Types
