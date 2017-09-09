@@ -1,7 +1,6 @@
 module Main where
 
 import Bot
-import Data.Text
-import System.Environment
+import qualified Data.Text.IO as TIO
 
-main = getEnv "TOKEN" >>= runBot . pack
+main = TIO.readFile "token" >>= runBot

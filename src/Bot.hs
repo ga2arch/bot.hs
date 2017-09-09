@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Bot where
 
 import Bot.Types
@@ -13,6 +14,7 @@ import Control.Concurrent.STM
 import Control.Concurrent.STM.TChan
 import Control.Concurrent
 import Control.Monad.Reader
+import Data.Monoid
 import Network.HTTP.Client
 import Network.HTTP.Client.TLS
 
@@ -61,7 +63,7 @@ processMessage = forever $ do
   go _ = return ()
 
 runBot tk = do
-  let token = TG.Token tk
+  let token = TG.Token ("bot" <> tk)
 
   channelConfig <- mkTelegram token
   feederChan <- feeder channelConfig
