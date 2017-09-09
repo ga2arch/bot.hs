@@ -4,19 +4,18 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Bot.Command.Feeder.Types where
 
-import Bot.Types
-import Bot.Command.Types
-
-import Data.Int
-import Database.Persist.Sql (SqlBackend)
-import Data.Pool (Pool)
-import Control.Concurrent.STM.TChan
-import Control.Monad.Base
-import Control.Monad.Logger
-import Control.Monad.Reader
-import Control.Monad.Catch
-import Control.Monad.Trans.Control
-import Network.HTTP.Client (Manager)
+import           Bot.Command.Types
+import           Bot.Types
+import           Control.Concurrent.STM.TChan
+import           Control.Monad.Base
+import           Control.Monad.Catch
+import           Control.Monad.Logger
+import           Control.Monad.Reader
+import           Control.Monad.Trans.Control
+import           Data.Int
+import           Data.Pool (Pool)
+import           Database.Persist.Sql (SqlBackend)
+import           Network.HTTP.Client (Manager)
 
 import qualified Data.ByteString.Char8 as C
 import qualified Data.Text as T

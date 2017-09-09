@@ -4,27 +4,26 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Bot where
 
-import Bot.Types
-import Bot.Command.Types
-import Bot.Command.Endpoints
-import Bot.Command.Feeder.Types
-import Bot.Command.Feeder
-
-import Control.Concurrent.STM
-import Control.Concurrent.STM.TChan
-import Control.Concurrent
-import Control.Monad.Reader
-import Data.Monoid
-import Network.HTTP.Client
-import Network.HTTP.Client.TLS
+import           Bot.Command.Endpoints
+import           Bot.Command.Feeder
+import           Bot.Command.Feeder.Types
+import           Bot.Command.Types
+import           Bot.Types
+import           Control.Concurrent
+import           Control.Concurrent.STM
+import           Control.Concurrent.STM.TChan
+import           Control.Monad.Reader
+import           Data.Monoid
+import           Network.HTTP.Client
+import           Network.HTTP.Client.TLS
 
 import qualified Data.Proxy as P
-import qualified Web.Telegram.API.Bot.Data as TG
-import qualified Web.Telegram.API.Bot.Responses as TG
-import qualified Web.Telegram.API.Bot.Requests as TG
+import qualified STMContainers.Map as M
 import qualified Web.Telegram.API.Bot.API as TG
 import qualified Web.Telegram.API.Bot.API.Updates as TG
-import qualified STMContainers.Map as M
+import qualified Web.Telegram.API.Bot.Data as TG
+import qualified Web.Telegram.API.Bot.Requests as TG
+import qualified Web.Telegram.API.Bot.Responses as TG
 
 -- * Bot
 dispatch :: (?feederChan :: TChan FeederEvent) => TG.Update -> ReaderT BotConfig IO ()

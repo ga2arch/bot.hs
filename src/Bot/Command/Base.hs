@@ -4,13 +4,13 @@
 {-# LANGUAGE RecordWildCards #-}
 module Bot.Command.Base where
 
-import Bot.Types
-import Bot.Command.Types
-import Bot.Command.Base.Types
-import Control.Concurrent.STM
-import Control.Concurrent.STM.TChan
-import Control.Monad.Free
-import Control.Monad.Reader
+import           Bot.Command.Base.Types
+import           Bot.Command.Types
+import           Bot.Types
+import           Control.Concurrent.STM
+import           Control.Concurrent.STM.TChan
+import           Control.Monad.Free
+import           Control.Monad.Reader
 
 import qualified Data.Text as T
 import qualified Web.Telegram.API.Bot.Data as TG

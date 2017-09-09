@@ -1,12 +1,12 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Bot.Types where
 
-import Control.Monad
-import Control.Concurrent.STM
-import Control.Concurrent.STM.TChan
-import Control.Monad.Reader
-import Data.Int
-import Network.HTTP.Client
+import           Control.Concurrent.STM
+import           Control.Concurrent.STM.TChan
+import           Control.Monad
+import           Control.Monad.Reader
+import           Data.Int
+import           Network.HTTP.Client
 
 import qualified Web.Telegram.API.Bot.Data as TG
 import qualified Web.Telegram.API.Bot.API as TG

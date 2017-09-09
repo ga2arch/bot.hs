@@ -7,47 +7,46 @@
 {-# LANGUAGE ViewPatterns #-}
 module Bot.Command.Feeder where
 
-import Bot.Types
-import Bot.Command.Types
-import Bot.Command.Feeder.Types
-import Bot.Command.Feeder.Database
-import Bot.Command.Base
-import Bot.Command.Base.Types
+import           Bot.Command.Base
+import           Bot.Command.Base.Types
+import           Bot.Command.Feeder.Database
+import           Bot.Command.Feeder.Types
+import           Bot.Command.Types
+import           Bot.Types
+import           Control.Concurrent
+import           Control.Concurrent.STM
+import           Control.Concurrent.STM.TChan
+import           Control.Monad.Catch
+import           Control.Monad.Free
+import           Control.Monad.Reader
+import           Control.Monad.Trans
+import           Data.Int
+import           Data.List
+import           Data.Maybe
+import           Data.Monoid
+import           Database.Persist (entityVal)
+import           Network.HTTP.Client
+import           Network.HTTP.Client.TLS
+import           Network.HTTP.Types.Header
+import           Network.URI
+import           Text.Feed.Import
+import           Text.Feed.Types
 
-import Control.Monad.Free
-import Control.Monad.Catch
-import Control.Monad.Trans
-import Control.Monad.Reader
-import Control.Concurrent
-import Control.Concurrent.STM
-import Control.Concurrent.STM.TChan
-import Data.Int
-import Data.Monoid
-import Database.Persist (entityVal)
-import Data.Maybe
-import Data.List
-import Text.Feed.Import
-import Text.Feed.Types
-import Network.HTTP.Client
-import Network.HTTP.Client.TLS
-import Network.URI
-import Network.HTTP.Types.Header
-
+import qualified Data.ByteString.Char8 as C
+import qualified Data.ByteString.Lazy as B
 import qualified Data.CaseInsensitive as CI
-import qualified Text.Atom.Feed as Atom
-import qualified Text.RSS.Syntax as RSS
-import qualified Text.RSS1.Syntax as RSS1
-import qualified STMContainers.Map as M
-import qualified Web.Telegram.API.Bot.Data as TG
-import qualified Web.Telegram.API.Bot.Responses as TG
-import qualified Web.Telegram.API.Bot.Requests as TG
-import qualified Web.Telegram.API.Bot.API as TG
-import qualified Web.Telegram.API.Bot.API.Updates as TG
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Database.Redis as R
-import qualified Data.ByteString.Char8 as C
-import qualified Data.ByteString.Lazy as B
+import qualified STMContainers.Map as M
+import qualified Text.Atom.Feed as Atom
+import qualified Text.RSS.Syntax as RSS
+import qualified Text.RSS1.Syntax as RSS1
+import qualified Web.Telegram.API.Bot.API as TG
+import qualified Web.Telegram.API.Bot.API.Updates as TG
+import qualified Web.Telegram.API.Bot.Data as TG
+import qualified Web.Telegram.API.Bot.Requests as TG
+import qualified Web.Telegram.API.Bot.Responses as TG
 
 subscribe :: (?feederChan :: TChan FeederEvent, Functor f, MonadFree f m, Feeder :<: f) => T.Text -> m ()
 subscribe url = liftF . inj $ Subscribe ?feederChan url ()

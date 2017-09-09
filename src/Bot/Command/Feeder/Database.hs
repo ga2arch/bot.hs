@@ -11,19 +11,17 @@
 module Bot.Command.Feeder.Database where
 
 import Bot.Command.Feeder.Types
-
-import           Control.Monad.IO.Class  (liftIO)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Logger
 import Control.Monad.Reader
-import Database.Persist
-import           Database.Persist.Sqlite
-import           Database.Persist.TH
-
+import Control.Monad.Trans.Control
+import Data.Maybe
+import Data.Pool
 import Data.Text (Text)
 import Data.Time.Clock
-import Data.Pool
-import Data.Maybe
-import Control.Monad.Logger
-import Control.Monad.Trans.Control
+import Database.Persist
+import Database.Persist.Sqlite
+import Database.Persist.TH
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 User

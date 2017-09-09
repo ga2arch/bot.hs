@@ -11,23 +11,23 @@
 {-# LANGUAGE ScopedTypeVariables  #-}
 module Bot.Command.Endpoints where
 
-import Bot.Types
-import Bot.Command
-import Bot.Command.Types
-import Bot.Command.Feeder
-import Bot.Command.Feeder.Types
-import Bot.Command.Base
-import Bot.Command.Base.Types
+import           Bot.Command
+import           Bot.Command.Base
+import           Bot.Command.Base.Types
+import           Bot.Command.Feeder
+import           Bot.Command.Feeder.Types
+import           Bot.Command.Types
+import           Bot.Types
+import           Control.Applicative
+import           Control.Concurrent.STM.TChan
+import           Control.Monad.Free
+import           Control.Monad.Reader
+import           Data.Maybe
+import           Data.Proxy
+import           Data.Text (Text)
+import           GHC.TypeLits
+import           Text.Read
 
-import Control.Concurrent.STM.TChan
-import Control.Applicative
-import Control.Monad.Free
-import Control.Monad.Reader
-import Data.Maybe
-import Data.Proxy
-import Data.Text (Text)
-import GHC.TypeLits
-import Text.Read
 import qualified Data.Text as T
 
 data a :<|> b = a :<|> b

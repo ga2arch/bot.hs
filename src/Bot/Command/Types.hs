@@ -4,15 +4,16 @@
 {-# LANGUAGE TypeOperators #-}
 module Bot.Command.Types where
 
-import Bot.Types
-import Control.Concurrent.STM.TChan
-import Control.Applicative
-import Control.Monad.Free
-import Control.Monad.Reader
-import Data.Maybe
-import Data.Text (Text)
-import GHC.TypeLits
-import Text.Read
+import           Bot.Types
+import           Control.Applicative
+import           Control.Concurrent.STM.TChan
+import           Control.Monad.Free
+import           Control.Monad.Reader
+import           Data.Maybe
+import           Data.Text (Text)
+import           GHC.TypeLits
+import           Text.Read
+
 import qualified Data.Text as T
 
 data (f :+: g) e = Inl (f e) | Inr (g e)
