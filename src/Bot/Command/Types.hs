@@ -92,8 +92,8 @@ instance (Read a, KnownSymbol tag, HasServer r) => HasServer (Capture a (tag :: 
     a <- readMaybe $ T.unpack text
     route (Proxy :: Proxy r) (handler a) text
 
-instance {-# OVERLAPPING #-} (HasServer r) => HasServer (Capture T.Text :> r) where
-  type Server (Capture T.Text :> r) = T.Text -> Server r
+instance {-# OVERLAPPING #-} (HasServer r, KnownSymbol tag) => HasServer (Capture T.Text (tag :: Symbol) :> r) where
+  type Server (Capture T.Text tag :> r) = T.Text -> Server r
   route Proxy handler text | T.length text > 0 =
     route (Proxy :: Proxy r) (handler text) (fst $ T.breakOn " " text)
   route _ _       _        = Nothing
