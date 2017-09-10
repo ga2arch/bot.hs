@@ -117,10 +117,12 @@ removeSubscription userId url = do
   flip runSqlPool pool $ do
     user <- selectFirst [UserUserId ==. userId] []
     feed <- selectFirst [FeedUrl ==. url] []
-    when (isJust user && isJust feed) $
+    when (isJust user && isJust feed) $ do
       deleteWhere [ SubscriptionUserId ==. (entityKey $ fromJust user)
                   , SubscriptionFeedId ==. (entityKey $ fromJust feed)
                   ]
+      subs <- selectList [SubscriptionFeedId ==. (entityKey $ fromJust feed)] []
+      when (null subs) $ deleteWhere [FeedId ==. (entityKey $ fromJust feed)]
 
 removeFeed :: (MonadReader FeederConfig m, MonadBaseControl IO m, MonadIO m)
            => Entity Feed -> m ()
