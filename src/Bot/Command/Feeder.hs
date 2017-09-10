@@ -182,7 +182,7 @@ feeder botConfig = do
    processFeed feed (AtomFeed Atom.Feed{..}) = undefined
    processFeed feed@(entityVal -> Feed feedUrl lastGuid) (RSSFeed RSS.RSS{rssChannel=RSS.RSSChannel{..}}) = do
      let firstGuid = rssGuid $ head rssItems
-     when (isJust lastGuid) $ do
+     when (isJust lastGuid && (fromJust lastGuid) /= firstGuid) $ do
        users <- loadUsersByFeed feed
        sendMessages users $
          takeWhile (\item -> (rssGuid item) /= (fromJust lastGuid)) rssItems
