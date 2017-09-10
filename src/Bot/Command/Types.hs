@@ -87,7 +87,7 @@ instance (KnownSymbol s, HasServer r) => HasServer ((s :: Symbol) :> r) where
       else Nothing
 
 instance (Read a, KnownSymbol tag, HasServer r) => HasServer (Capture a (tag :: Symbol) :> r) where
-  type Server (Capture a b :> r) = a -> Server r
+  type Server (Capture a tag :> r) = a -> Server r
   route Proxy handler text = do
     a <- readMaybe $ T.unpack text
     route (Proxy :: Proxy r) (handler a) text
