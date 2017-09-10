@@ -164,6 +164,7 @@ feeder botConfig = do
                     (\ex -> onFeedError ex feed)
 
    onFeedError ex feed@(entityVal -> Feed feedUrl _) = do
+     liftIO $ print ex
      users <- loadUsersByFeed feed
      forM_ users $ \(entityVal -> User userId) ->
          call $ sendMessage (read userId)

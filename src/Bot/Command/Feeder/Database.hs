@@ -127,5 +127,5 @@ removeFeed :: (MonadReader FeederConfig m, MonadBaseControl IO m, MonadIO m)
 removeFeed feed = do
   pool <- asks fPool
   flip runSqlPool pool $ do
-    deleteWhere [FeedId ==. (entityKey feed)]
     deleteWhere [SubscriptionFeedId ==. (entityKey feed)]
+    deleteWhere [FeedId ==. (entityKey feed)]
