@@ -64,8 +64,8 @@ loadUsersByFeed feed = do
  where
    usersByFeed feed = do
      subs <- selectList [SubscriptionFeedId ==. (entityKey feed)] []
-     let subIds = map (\(Subscription _ userId) -> show userId) $ map entityVal subs
-     selectList [UserUserId <-. subIds] []
+     let subIds = map (\(Subscription userId _) -> userId) $ map entityVal subs
+     selectList [UserId <-. subIds] []
 
 addSubscription :: (MonadReader FeederConfig m, MonadBaseControl IO m, MonadIO m)
                 => String -> Text -> m (Key Subscription)
