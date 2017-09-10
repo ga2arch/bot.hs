@@ -71,35 +71,27 @@ addSubscription :: (MonadReader FeederConfig m, MonadBaseControl IO m, MonadIO m
                 => String -> Text -> m (Key Subscription)
 addSubscription userId url = do
   pool <- asks fPool
-  (user,feed) <- flip runSqlPool pool $ do
+  flip runSqlPool pool $ do
     user <- selectFirst [UserUserId ==. userId] []
     feed <- selectFirst [FeedUrl ==. url] []
-    return (user, feed)
+    subscribe userId url (entityKey <$> user) (entityKey <$> feed)
 
-  subscribe userId url user feed
  where
-   subscribe _ _ (Just user) (Just feed) = do
-     pool <- asks fPool
-     flip runSqlPool pool $ insert $ Subscription (entityKey user) (entityKey feed)
+   subscribe _ _ (Just user) (Just feed) =
+     insert $ Subscription user feed
 
    subscribe userId url Nothing Nothing = do
-     pool <- asks fPool
-     flip runSqlPool pool $ do
-       user <- insert $ User userId
-       feed <- insert $ Feed url Nothing
-       insert $ Subscription  user feed
+     user <- insert $ User userId
+     feed <- insert $ Feed url Nothing
+     insert $ Subscription  user feed
 
    subscribe userId url (Just user) Nothing = do
-     pool <- asks fPool
-     flip runSqlPool pool $ do
-       feed <- insert $ Feed url Nothing
-       insert $ Subscription (entityKey user) feed
+     feed <- insert $ Feed url Nothing
+     insert $ Subscription user feed
 
    subscribe userId url Nothing (Just feed) = do
-     pool <- asks fPool
-     flip runSqlPool pool $ do
-       user <- insert $ User userId
-       insert $ Subscription user (entityKey feed)
+     user <- insert $ User userId
+     insert $ Subscription user feed
 
 removeSubscriptionsByUser :: (MonadReader FeederConfig m, MonadBaseControl IO m, MonadIO m)
                     => String -> m ()
