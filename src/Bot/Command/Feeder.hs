@@ -137,7 +137,7 @@ feeder botConfig = do
   liftIO . forkIO . forever $ do
     print "checking feed"
     runReaderT (runFeeder checkFeeds) feederConfig
-    threadDelay 10000000
+    threadDelay 60000000
 
   return feederChan
   where

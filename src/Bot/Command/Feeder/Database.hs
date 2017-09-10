@@ -75,7 +75,6 @@ addSubscription userId url = do
     user <- selectFirst [UserUserId ==. userId] []
     feed <- selectFirst [FeedUrl ==. url] []
     subscribe userId url (entityKey <$> user) (entityKey <$> feed)
-
  where
    subscribe _ _ (Just user) (Just feed) =
      insert $ Subscription user feed
