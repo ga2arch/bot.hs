@@ -57,11 +57,8 @@ processMessage = forever $ do
   m <- liftIO . atomically $ readTChan inChan
   go m
  where
-  go TG.Message{chat=TG.Chat{chat_id=chatId}, text=Just text} = do
-    case text of
-      "/help" -> void $ call $ sendMessage chatId $ help (P.Proxy :: P.Proxy Commands) T.empty
-      _ -> serve (P.Proxy :: P.Proxy Commands) handleCommands text
-    return ()
+  go TG.Message{chat=TG.Chat{chat_id=chatId}, text=Just text} =
+    serve (P.Proxy :: P.Proxy Commands) handleCommands text
   go _ = return ()
 
 sendMessage chatId text = do

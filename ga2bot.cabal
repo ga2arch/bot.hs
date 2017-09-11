@@ -32,7 +32,7 @@ executable ga2bot
                      , stm-containers
                      , text
                      , hedis
-                     , feed
+                     , feed >= 1.0
                      , bytestring
                      , exceptions
                      , network-uri
@@ -48,3 +48,4 @@ executable ga2bot
                      , monad-control
                      , transformers-base
                      , fast-logger
+                     , monoid-subclasses

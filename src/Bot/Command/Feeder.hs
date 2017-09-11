@@ -21,6 +21,8 @@ import           Control.Concurrent.STM.TChan
 import           Control.Monad.Catch
 import           Control.Monad.Free
 import Control.Monad.Logger
+import Data.Time.LocalTime
+import Data.Time.Format
 import           Control.Monad.Reader
 import           Control.Monad.Trans
 import           Data.Int
@@ -115,7 +117,7 @@ listCommand = do
   if (null feeds)
     then send "You don't have any subscription"
     else do
-      let urls = map (\(entityVal -> (Feed url _)) -> url) feeds
+      let urls = map (\(entityVal -> (Feed url _ _)) -> url) feeds
       send $ "You are subscribed to: \n" <> T.intercalate "\n" urls
 
 unsubscribeCommand :: (?feederChan :: TChan FeederEvent) => T.Text -> Free (Base :+: Feeder) ()
@@ -167,7 +169,7 @@ feeder botConfig = do
                     (loadFeed feed)
                     (\ex -> onFeedError ex feed)
 
-   onFeedError ex feed@(entityVal -> Feed feedUrl _) = do
+   onFeedError ex feed@(entityVal -> Feed feedUrl _ _) = do
      liftIO $ print ex
      users <- loadUsersByFeed feed
      forM_ users $ \(entityVal -> User userId) ->
@@ -175,7 +177,7 @@ feeder botConfig = do
                             ("error processing feed: " <> feedUrl <> " unsubscribing")
      removeFeed feed
 
-   loadFeed feed@(entityVal -> (Feed feedUrl feedUpdateDate)) = do
+   loadFeed feed@(entityVal -> (Feed feedUrl _ _)) = do
      manager <- asks fManager
      liftIO $ print $ "loading " ++ (T.unpack feedUrl)
      request <- liftIO $ parseRequest $ T.unpack feedUrl
@@ -185,23 +187,29 @@ feeder botConfig = do
        Nothing -> return ()
 
    processFeed feed (AtomFeed Atom.Feed{..}) = undefined
-   processFeed feed@(entityVal -> Feed feedUrl lastGuid) (RSSFeed RSS.RSS{rssChannel=RSS.RSSChannel{..}}) = do
-     let firstGuid = rssGuid $ head rssItems
-     when (isJust lastGuid && (fromJust lastGuid) /= firstGuid) $ do
-       users <- loadUsersByFeed feed
-       sendMessages users $
-         takeWhile (\item -> (rssGuid item) /= (fromJust lastGuid)) rssItems
-     updateLastGuid feed (rssGuid $ head rssItems)
+   processFeed feed@(entityVal -> Feed feedUrl _ lastDate) (RSSFeed RSS.RSS{rssChannel=RSS.RSSChannel{..}}) = do
+     case lastDate of
+       Just date -> do
+         users <- loadUsersByFeed feed
+         let newItems = filter (\item -> (rssDate item) > (fromJust lastDate)) rssItems
+         sendMessages users newItems
+         when (not $ null newItems) $
+           updateLastDate feed (last . sort $ map rssDate newItems)
+       Nothing -> when (not $ null rssItems) $
+         updateLastDate feed (last . sort $ map rssDate rssItems)
 
    sendMessages users rssItems = do
      forM_ rssItems $ \RSS.RSSItem{..} -> do
-       let title = T.pack $ fromJust rssItemTitle
-       let url = T.pack $ fromJust rssItemLink
+       let title = fromJust rssItemTitle
+       let url = fromJust rssItemLink
        let message = title <> "\n\n" <> url
        forM_ users $ \(entityVal -> User userId) ->
          call $ sendMessage (read userId) message
 
-   rssGuid = T.pack . RSS.rssGuidValue . fromJust . RSS.rssItemGuid
+   rssGuid = RSS.rssGuidValue . fromJust . RSS.rssItemGuid
+   rssDate x = do
+     let pubDate = fromJust $ RSS.rssItemPubDate x
+     zonedTimeToUTC $ parseTimeOrError True defaultTimeLocale rfc822DateFormat (T.unpack pubDate)
 
    call action = do
      config <- asks fTelegramConfig

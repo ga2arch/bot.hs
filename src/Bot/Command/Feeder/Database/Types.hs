@@ -10,6 +10,7 @@ import Data.Text (Text)
 import Database.Persist
 import Database.Persist.Sqlite
 import Database.Persist.TH
+import Data.Time.Clock
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 User
@@ -19,6 +20,7 @@ User
 Feed
     url Text
     lastGuid Text Maybe
+    lastDate UTCTime Maybe
     deriving Show
 
 Subscription

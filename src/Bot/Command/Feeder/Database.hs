@@ -33,6 +33,13 @@ updateLastGuid feed guid = do
   flip runSqlPool pool $ update (entityKey feed) [FeedLastGuid =. (Just guid)]
   return ()
 
+updateLastDate :: (MonadReader FeederConfig m, MonadBaseControl IO m, MonadIO m)
+               => Entity Feed -> UTCTime -> m ()
+updateLastDate feed date = do
+  pool <- asks fPool
+  flip runSqlPool pool $ update (entityKey feed) [FeedLastDate =. (Just date)]
+  return ()
+
 loadFeeds :: (MonadReader FeederConfig m, MonadBaseControl IO m, MonadIO m) => m ([Entity Feed])
 loadFeeds = do
   pool <- asks fPool
@@ -81,11 +88,11 @@ addSubscription userId url = do
 
    subscribe userId url Nothing Nothing = do
      user <- insert $ User userId
-     feed <- insert $ Feed url Nothing
+     feed <- insert $ Feed url Nothing Nothing
      insert $ Subscription  user feed
 
    subscribe userId url (Just user) Nothing = do
-     feed <- insert $ Feed url Nothing
+     feed <- insert $ Feed url Nothing Nothing
      insert $ Subscription user feed
 
    subscribe userId url Nothing (Just feed) = do
