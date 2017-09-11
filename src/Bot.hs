@@ -105,7 +105,7 @@ runBot tk = do
             getUpdates token manager (Just $ lastId+1) f
           else
             getUpdates token manager lastId f
-      Left  x -> print x
+      Left  x -> getUpdates token manager lastId f
 
   mkTelegram token = do
     manager <- newManager tlsManagerSettings

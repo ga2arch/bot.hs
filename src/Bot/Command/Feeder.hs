@@ -5,6 +5,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Bot.Command.Feeder where
 
 import           Bot.Command.Base
@@ -19,6 +20,7 @@ import           Control.Concurrent.STM
 import           Control.Concurrent.STM.TChan
 import           Control.Monad.Catch
 import           Control.Monad.Free
+import Control.Monad.Logger
 import           Control.Monad.Reader
 import           Control.Monad.Trans
 import           Data.Int
@@ -32,6 +34,7 @@ import           Network.HTTP.Types.Header
 import           Network.URI
 import           Text.Feed.Import
 import           Text.Feed.Types
+import System.Log.FastLogger
 
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy as B
@@ -125,7 +128,8 @@ feeder botConfig = do
   feederChan <- newTChanIO
   pool <- initDb
   manager <- newManager tlsManagerSettings
-  let feederConfig = FeederConfig pool botConfig manager
+  logOut <- newStdoutLoggerSet defaultBufSize
+  let feederConfig = FeederConfig pool botConfig manager logOut
 
   liftIO . forkIO . forever $ do
     event <- atomically $ readTChan feederChan
@@ -135,7 +139,6 @@ feeder botConfig = do
       UnsubscribeUrl userId url ->  onUnsubscribe userId url)) feederConfig
 
   liftIO . forkIO . forever $ do
-    print "checking feed"
     runReaderT (runFeeder checkFeeds) feederConfig
     threadDelay 60000000
 
@@ -157,6 +160,7 @@ feeder botConfig = do
      return ()
 
    checkFeeds = do
+     $(logDebug) "checking feed"
      feeds <- loadFeeds
      forM_ feeds $ \feed ->
                     catchAll

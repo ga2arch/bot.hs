@@ -47,3 +47,4 @@ executable ga2bot
                      , monad-logger
                      , monad-control
                      , transformers-base
+                     , fast-logger

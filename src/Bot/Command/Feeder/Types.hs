@@ -18,6 +18,7 @@ import           Data.Pool (Pool)
 import           Database.Persist.Sql (Entity)
 import           Database.Persist.Sql (SqlBackend)
 import           Network.HTTP.Client (Manager)
+import System.Log.FastLogger
 
 import qualified Data.ByteString.Char8 as C
 import qualified Data.Text as T
@@ -37,6 +38,7 @@ data Feeder next = Subscribe (TChan FeederEvent) T.Text next
 data FeederConfig = FeederConfig { fPool :: Pool SqlBackend
                                  , fTelegramConfig :: TelegramConfig
                                  , fManager :: Manager
+                                 , fLogOut :: LoggerSet
                                  }
 
 newtype FeederMonad a = FeederMonad { runFeeder :: ReaderT FeederConfig IO a }
@@ -47,3 +49,8 @@ instance MonadBaseControl IO FeederMonad where
   type StM FeederMonad a = a
   liftBaseWith f = FeederMonad $ liftBaseWith $ \q -> f (q . runFeeder)
   restoreM = FeederMonad . restoreM
+
+instance MonadLogger FeederMonad where
+  monadLoggerLog loc source ll msg = do
+    out <- asks fLogOut
+    liftIO $ pushLogStr out $ defaultLogStr loc source ll $ toLogStr msg
