@@ -63,8 +63,8 @@ processMessage = forever $ do
  where
   go TG.Message{chat=TG.Chat{chat_id=chatId}, text=Just text} = do
     namespace <- asks userNamespace
-    name <- liftIO $ readMVar namespace
-    serve (P.Proxy :: P.Proxy Commands) handleCommands $ name <> text
+    ns <- liftIO $ readMVar namespace
+    serve (P.Proxy :: P.Proxy Commands) handleCommands ns text
 
   go x = return ()
 

@@ -48,20 +48,20 @@ data Action = PushNamespace T.Text | PopNamespace T.Text
 
 class HasServer api where
   type Server api :: *
-  route :: Proxy api -> Server api -> Maybe Action -> T.Text -> Maybe (UserMonad ())
+  route :: Proxy api -> Server api -> Maybe Action -> T.Text -> T.Text -> Maybe (UserMonad ())
 
 instance (HasServer a, HasServer b) => HasServer (a :<|> b) where
   type Server (a :<|> b) = Server a :<|> Server b
-  route Proxy (handlera :<|> handlerb) action text =
-    route pa handlera action text
-    <|> route pb handlerb action text
+  route Proxy (handlera :<|> handlerb) action ns text =
+    route pa handlera action ns text
+    <|> route pb handlerb action ns text
     where
       pa = Proxy :: Proxy a
       pb = Proxy :: Proxy b
 
 instance (Functor f, Eval UserMonad f, Base :<: f) => HasServer (Run f (desc :: Symbol)) where
   type Server (Run f b) = Free f ()
-  route Proxy handler action text =
+  route Proxy handler action ns text =
     Just $ case action of
              Just (PushNamespace ns) -> iterM runAlgebra (pushNamespace ns >> handler)
              Just (PopNamespace  ns) -> iterM runAlgebra (popNamespace ns >> handler)
@@ -69,30 +69,33 @@ instance (Functor f, Eval UserMonad f, Base :<: f) => HasServer (Run f (desc :: 
 
 instance (KnownSymbol s, HasServer r) => HasServer ((s :: Symbol) :> r) where
   type Server (s :> r) = Server r
-  route Proxy handler action text = do
+  route Proxy handler action ns text = do
     let prefix = T.pack $ symbolVal (Proxy :: Proxy s)
     case T.stripPrefix prefix text of
-      Just rest -> route (Proxy :: Proxy r) handler action (T.drop 1 rest)
+      Just rest -> route (Proxy :: Proxy r) handler action ns (T.drop 1 rest)
       Nothing -> Nothing
 
 instance (KnownSymbol s, KnownSymbol desc, HasServer r) => HasServer (NS (s :: Symbol) (desc :: Symbol) :> r) where
   type Server (NS s desc :> r) = Server r
-  route Proxy handler action text = do
+  route Proxy handler action ns text = do
     let prefix = T.pack $ symbolVal (Proxy :: Proxy s)
     case T.stripPrefix prefix text of
       Just rest ->
         if ((not $ T.null rest) && T.head rest == '/')
         then do
           if (rest == "/exit")
-            then route (Proxy :: Proxy r) handler (Just $ PopNamespace prefix) rest
-            else route (Proxy :: Proxy r) handler action rest
-        else route (Proxy :: Proxy r) handler (Just $ PushNamespace prefix) "/start"
-      Nothing -> Nothing
+            then route (Proxy :: Proxy r) handler (Just $ PopNamespace prefix) ns rest
+            else case route (Proxy :: Proxy r) handler action ns rest of
+                   Just x -> Just x
+                   Nothing -> Just $ return ()
+
+        else route (Proxy :: Proxy r) handler (Just $ PushNamespace prefix) ns "/start"
+      Nothing -> if prefix == ns then Just $ return () else Nothing
 
 instance {-# OVERLAPPING #-} (KnownSymbol s, KnownSymbol desc, Eval UserMonad f)
   => HasServer (Match (s :: Symbol) :> (Run f (desc :: Symbol))) where
   type Server (Match s :> Run f desc) = T.Match T.Text -> Free f ()
-  route Proxy handler action text = do
+  route Proxy handler action ns text = do
     regex <- T.compileRegex $ symbolVal (Proxy :: Proxy s)
     let match = text T.?=~ regex
     if T.matched match
@@ -101,15 +104,15 @@ instance {-# OVERLAPPING #-} (KnownSymbol s, KnownSymbol desc, Eval UserMonad f)
 
 instance (Read a, KnownSymbol tag, HasServer r) => HasServer (Capture a (tag :: Symbol) :> r) where
   type Server (Capture a tag :> r) = a -> Server r
-  route Proxy handler action text = do
+  route Proxy handler action ns text = do
     a <- readMaybe $ T.unpack text
-    route (Proxy :: Proxy r) (handler a) action text
+    route (Proxy :: Proxy r) (handler a) action ns text
 
 instance {-# OVERLAPPING #-} (HasServer r, KnownSymbol tag) => HasServer (Capture T.Text (tag :: Symbol) :> r) where
   type Server (Capture T.Text tag :> r) = T.Text -> Server r
-  route Proxy handler action text | T.length text > 0 =
-    route (Proxy :: Proxy r) (handler text) action (fst $ T.breakOn " " text)
-  route _ _       _      _  = Nothing
+  route Proxy handler action ns text | T.length text > 0 =
+    route (Proxy :: Proxy r) (handler text) action ns (fst $ T.breakOn " " text)
+  route _ _       _      _ _ = Nothing
 
 -- * Help
 class HasHelp api where
@@ -142,7 +145,11 @@ instance (Read a, KnownSymbol tag, HasHelp r) => HasHelp (Capture a (tag :: Symb
   help Proxy acc =
     help (Proxy :: Proxy r) (acc <> " <" <> (T.pack $ symbolVal (Proxy :: Proxy tag)) <> ">")
 
-serve :: (HasServer layout) => Proxy layout -> Server layout -> T.Text -> UserMonad ()
-serve p h xs = case route p h Nothing xs of
-  Just m  -> m
-  Nothing -> return ()
+serve :: (HasServer layout) => Proxy layout -> Server layout -> T.Text -> T.Text -> UserMonad ()
+serve p h ns xs = do
+  let text = if ("/" `T.isPrefixOf` xs)
+             then ns <> xs
+             else xs
+  case route p h Nothing ns text of
+      Just m  -> m
+      Nothing -> return ()
