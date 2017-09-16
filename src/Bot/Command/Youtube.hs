@@ -57,7 +57,7 @@ instance Eval UserMonad Youtube where
 
   runAlgebra (Cleanup filepath next) = do
     let (dir, _) = splitFileName filepath
-    liftIO $ removeDirectory dir
+    liftIO $ removeDirectoryRecursive dir
     next
 
 getTitle' videoId = do
