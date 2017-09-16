@@ -19,7 +19,9 @@ import           Control.Monad.IO.Class
 import           Data.Monoid
 import           Data.UUID
 import           Data.UUID.V4
+import           System.Directory
 import           System.Exit
+import           System.FilePath.Posix
 import           System.Process.Typed
 
 import qualified Data.ByteString.Lazy.Char8 as C
@@ -28,11 +30,9 @@ import qualified Text.RE.PCRE.ByteString.Lazy as R
 import qualified Text.RE.Replace as R
 import qualified Web.Telegram.API.Bot.Requests as TG
 
-download :: (Functor f, MonadFree f m, Youtube :<: f) => T.Text -> m (Either T.Text FilePath)
 download url = liftF . inj $ Download url id
-
-getTitle :: (Functor f, MonadFree f m, Youtube :<: f) => T.Text -> m (Either T.Text T.Text)
 getTitle url = liftF . inj $ GetTitle url id
+cleanup filepath = liftF . inj $ Cleanup filepath ()
 
 youtubeCommand :: R.Match T.Text -> Free (Base :+: Youtube) ()
 youtubeCommand match = do
@@ -44,6 +44,7 @@ youtubeCommand match = do
     Right path -> do
       Right title <- getTitle videoId
       uploadAudio title path
+      cleanup path
 
 instance Eval UserMonad Youtube where
   runAlgebra (Download videoId next) = do
@@ -53,6 +54,11 @@ instance Eval UserMonad Youtube where
   runAlgebra (GetTitle videoId next) = do
     out <- liftIO $ getTitle' videoId
     next out
+
+  runAlgebra (Cleanup filepath next) = do
+    let (dir, _) = splitFileName filepath
+    liftIO $ removeDirectory dir
+    next
 
 getTitle' videoId = do
   let ydlConfig = proc "youtube-dl" ["-e", T.unpack videoId]

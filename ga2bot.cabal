@@ -68,3 +68,4 @@ executable ga2bot
                      , typed-process
                      , uuid
                      , directory
+                     , filepath
