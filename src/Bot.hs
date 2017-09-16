@@ -61,7 +61,7 @@ processMessage = forever $ do
     serve (P.Proxy :: P.Proxy Commands) handleCommands text
   go TG.Message{chat=TG.Chat{chat_id=chatId}, text=Just text, entities=Just entities} = do
     let x = T.pack $ concat $ map show entities
-    serve (P.Proxy :: P.Proxy Commands) handleCommands (text <> x)
+    serve (P.Proxy :: P.Proxy Commands) handleCommands (text <> " " <> x)
   go x = return ()
 
 sendMessage chatId text = do
