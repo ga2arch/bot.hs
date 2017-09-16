@@ -57,9 +57,12 @@ processMessage = forever $ do
   m <- liftIO . atomically $ readTChan inChan
   go m
  where
-  go TG.Message{chat=TG.Chat{chat_id=chatId}, text=Just text} =
+  go TG.Message{chat=TG.Chat{chat_id=chatId}, text=Just text, entities=Nothing} =
     serve (P.Proxy :: P.Proxy Commands) handleCommands text
-  go _ = return ()
+  go TG.Message{chat=TG.Chat{chat_id=chatId}, text=Just text, entities=Just entities} = do
+    let x = T.pack $ concat $ map show entities
+    serve (P.Proxy :: P.Proxy Commands) handleCommands (text <> x)
+  go x = return ()
 
 sendMessage chatId text = do
    TG.sendMessageM TG.SendMessageRequest {
