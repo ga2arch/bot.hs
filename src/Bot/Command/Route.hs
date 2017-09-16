@@ -12,6 +12,7 @@
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE LambdaCase  #-}
 {-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE ViewPatterns  #-}
 module Bot.Command.Route where
 
 import           Bot.Command.Base
@@ -71,25 +72,21 @@ instance (KnownSymbol s, HasServer r) => HasServer ((s :: Symbol) :> r) where
   type Server (s :> r) = Server r
   route Proxy handler action ns text = do
     let prefix = T.pack $ symbolVal (Proxy :: Proxy s)
-    case T.stripPrefix prefix text of
-      Just rest -> route (Proxy :: Proxy r) handler action ns (T.drop 1 rest)
-      Nothing -> Nothing
+    rest <- T.stripPrefix prefix text
+    route (Proxy :: Proxy r) handler action ns (T.drop 1 rest)
 
-instance (KnownSymbol s, KnownSymbol desc, HasServer r) => HasServer (NS (s :: Symbol) (desc :: Symbol) :> r) where
+instance (KnownSymbol s, KnownSymbol desc, HasServer r)
+  => HasServer (NS (s :: Symbol) (desc :: Symbol) :> r) where
   type Server (NS s desc :> r) = Server r
   route Proxy handler action ns text = do
     let prefix = T.pack $ symbolVal (Proxy :: Proxy s)
     case T.stripPrefix prefix text of
-      Just rest ->
-        if ((not $ T.null rest) && T.head rest == '/')
-        then do
-          if (rest == "/exit")
-            then route (Proxy :: Proxy r) handler (Just $ PopNamespace prefix) ns rest
-            else case route (Proxy :: Proxy r) handler action ns rest of
-                   Just x -> Just x
-                   Nothing -> Just $ return ()
-
-        else route (Proxy :: Proxy r) handler (Just $ PushNamespace prefix) ns "/start"
+      Just rest@(T.uncons -> Just ('/', "exit")) ->
+        route (Proxy :: Proxy r) handler (Just $ PopNamespace prefix) ns rest
+      Just rest@(T.uncons -> Just ('/', _)) ->
+        Just $ maybe (return ()) id $ route (Proxy :: Proxy r) handler action ns rest
+      Just (T.uncons -> Nothing) ->
+        route (Proxy :: Proxy r) handler (Just $ PushNamespace prefix) ns "/start"
       Nothing -> if prefix == ns then Just $ return () else Nothing
 
 instance {-# OVERLAPPING #-} (KnownSymbol s, KnownSymbol desc, Eval UserMonad f)

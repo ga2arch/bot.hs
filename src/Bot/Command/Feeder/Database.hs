@@ -27,7 +27,7 @@ run f = do
 initDb :: (MonadBaseControl IO m, MonadIO m) => m (Pool SqlBackend)
 initDb = runStderrLoggingT $ do
   pool <- createPostgresqlPool "postgresql://localhost/feeder?user=ga2bot" 5
-  runSqlPool (runMigration migrateAll) pool
+  liftSqlPersistMPool (runMigration migrateAll) pool
   return pool
 
 updateLastDate :: (MonadReader FeederConfig m, MonadBaseControl IO m, MonadIO m)
