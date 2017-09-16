@@ -90,6 +90,7 @@ instance Eval UserMonad Feeder where
     next feeds
 
   runAlgebra (Validate url next) = do
+    liftIO $ print url
     if (isURI (T.unpack url))
       then do
         manager <- liftIO $ newManager tlsManagerSettings

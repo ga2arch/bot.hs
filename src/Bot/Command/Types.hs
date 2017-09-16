@@ -84,9 +84,12 @@ instance (KnownSymbol s, HasServer r) => HasServer ((s :: Symbol) :> r) where
   type Server (s :> r) = Server r
   route Proxy handler text = do
     let prefix = T.pack $ symbolVal (Proxy :: Proxy s)
-    if prefix `T.isPrefixOf` text
-      then route (Proxy :: Proxy r) handler $ T.drop 1 $ fromJust $ T.stripPrefix prefix text
-      else Nothing
+    case T.stripPrefix prefix text of
+      Just rest ->
+        if ((not $ T.null rest) && T.head rest == '/')
+          then route (Proxy :: Proxy r) handler rest
+          else route (Proxy :: Proxy r) handler (T.drop 1 rest)
+      Nothing -> Nothing
 
 instance {-# OVERLAPPING #-} (KnownSymbol s, KnownSymbol desc, Eval UserMonad f)
   => HasServer (Match (s :: Symbol) :> (Run f (desc :: Symbol))) where
@@ -116,6 +119,9 @@ class HasHelp api where
 
 instance (HasHelp a, HasHelp b) => HasHelp (a :<|> b) where
   help Proxy acc = help (Proxy :: Proxy a) acc <> help (Proxy :: Proxy b) acc
+
+instance {-# OVERLAPPING #-} (KnownSymbol s, HasHelp a, HasHelp b) => HasHelp ((s :: Symbol) :> (a :<|> b)) where
+  help Proxy acc = acc
 
 instance (Functor f, KnownSymbol desc, Eval UserMonad f) => HasHelp (Run f (desc :: Symbol)) where
   help Proxy acc = acc <> " " <> (T.pack $ symbolVal (Proxy :: Proxy desc)) <> "\n"

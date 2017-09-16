@@ -10,6 +10,7 @@ import           Bot.Command.Feeder.Types
 import           Bot.Command.Types
 import           Bot.Types
 import           Control.Concurrent
+import           Control.Concurrent.MVar
 import           Control.Concurrent.STM
 import           Control.Concurrent.STM.TChan
 import           Control.Monad.Reader
@@ -44,7 +45,9 @@ dispatch TG.Update{..} = do
        Nothing  -> do
          botState <- ask
          userChan <- liftIO $ newTChanIO
-         liftIO . forkIO $ runReaderT (runUser processMessage) $ UserConfig userChan botState chatId
+         userNamespace <- liftIO $ newMVar T.empty
+         liftIO . forkIO $
+           runReaderT (runUser processMessage)$ UserConfig userChan botState chatId userNamespace
          liftIO . atomically $ do
            M.insert userChan user_id users
            writeTChan userChan message
@@ -57,11 +60,11 @@ processMessage = forever $ do
   m <- liftIO . atomically $ readTChan inChan
   go m
  where
-  go TG.Message{chat=TG.Chat{chat_id=chatId}, text=Just text, entities=Nothing} =
-    serve (P.Proxy :: P.Proxy Commands) handleCommands text
-  go TG.Message{chat=TG.Chat{chat_id=chatId}, text=Just text, entities=Just entities} = do
-    let x = T.pack $ concat $ map show entities
-    serve (P.Proxy :: P.Proxy Commands) handleCommands (text <> " " <> x)
+  go TG.Message{chat=TG.Chat{chat_id=chatId}, text=Just text} = do
+    namespace <- asks userNamespace
+    name <- liftIO $ readMVar namespace
+    serve (P.Proxy :: P.Proxy Commands) handleCommands $ name <> text
+
   go x = return ()
 
 sendMessage chatId text = do

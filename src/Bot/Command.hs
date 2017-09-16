@@ -23,22 +23,48 @@ import qualified Text.RE.Replace as R
 import qualified Text.RE.PCRE.Text as R
 import Text.Regex.Base.RegexLike (MatchText, getAllTextMatches)
 
-type Commands =
-  "/start" :> Run (Base) "welcome"
-  :<|> "/subscribe" :> Capture Text "url" :> Run (Base :+: Feeder) "subscribe to the feed"
+type Matches = Match
+  "(?:https?://)?(?:www\\.)?youtu(?:be\\.com/watch\\?(?:.*?&(?:amp;)?)?v=|\\.be/)([\\w\\-]+)(?:&(?:amp;)?[\\w\\?=]*)?"
+  :> Run (Base :+: Youtube) ""
+
+type FeederCommands =
+  "/subscribe" :> Capture Text "url" :> Run (Base :+: Feeder) "subscribe to the feed"
   :<|> "/unsubscribe" :> Capture Text "url" :> Run (Base :+: Feeder) "unsubscribe from the feed"
   :<|> "/list" :> Run (Base :+: Feeder) "list all feed subscriptions"
   :<|> "/help" :> Run (Base) "show help"
-  :<|> Match "(?:https?://)?(?:www\\.)?youtu(?:be\\.com/watch\\?(?:.*?&(?:amp;)?)?v=|\\.be/)([\\w\\-]+)(?:&(?:amp;)?[\\w\\?=]*)?"
-  :> Run (Base :+: Youtube) ""
+  :<|> "/exit" :> Run (Base) "exit feeder"
 
-handleCommands :: (?feederChan :: TChan FeederEvent) => Server Commands
-handleCommands = startCommand
+type FeederNamespace =
+  "/feeder" :> Run (Base) "here be feeds"
+  :<|> "/:feeder" :> FeederCommands
+
+type Commands =
+  "/start" :> Run (Base) "welcome"
+  :<|> FeederNamespace
+  :<|> Matches
+  :<|> "/help" :> Run (Base) "show help"
+
+handleFeederNamespace :: (?feederChan :: TChan FeederEvent) => Server FeederNamespace
+handleFeederNamespace =
+  enterFeederCommand
   :<|> subscribeCommand
   :<|> unsubscribeCommand
   :<|> listCommand
   :<|> helpCommand
+  :<|> exitFeederCommand
+ where
+   enterFeederCommand = do
+     pushNamespace "/:feeder"
+     send "here be feeds\n/help for feeder specific commands"
+   exitFeederCommand  = popNamespace "/:feeder"
+   helpText = help (Proxy :: Proxy FeederCommands) empty
+   helpCommand = send helpText
+
+handleCommands :: (?feederChan :: TChan FeederEvent) => Server Commands
+handleCommands = startCommand
+  :<|> handleFeederNamespace
   :<|> youtubeCommand
+  :<|> helpCommand
  where
   helpText = help (Proxy :: Proxy Commands) empty
   helpCommand = send helpText
