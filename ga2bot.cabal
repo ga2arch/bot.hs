@@ -49,3 +49,9 @@ executable ga2bot
                      , transformers-base
                      , fast-logger
                      , monoid-subclasses
+                     , array
+                     , regex-base
+                     , regex
+                     , regex-with-pcre
+                     , typed-process
+                     , uuid

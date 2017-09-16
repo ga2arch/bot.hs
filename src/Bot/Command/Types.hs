@@ -25,6 +25,7 @@ import           GHC.TypeLits
 import           Text.Read
 
 import qualified Data.Text as T
+import qualified Text.RE.PCRE.Text as T
 
 data (f :+: g) e = Inl (f e) | Inr (g e)
 infixr 7 :+:
@@ -60,6 +61,7 @@ infixr 8 :<|>
 data (a :: k) :> (b :: *)
 infixr 9 :>
 
+data Match (regex :: Symbol)
 data Capture (a :: *) (tag :: Symbol)
 data Run a (desc :: Symbol)
 
@@ -86,6 +88,16 @@ instance (KnownSymbol s, HasServer r) => HasServer ((s :: Symbol) :> r) where
       then route (Proxy :: Proxy r) handler $ T.drop 1 $ fromJust $ T.stripPrefix prefix text
       else Nothing
 
+instance {-# OVERLAPPING #-} (KnownSymbol s, KnownSymbol desc, Eval UserMonad f)
+  => HasServer (Match (s :: Symbol) :> (Run f (desc :: Symbol))) where
+  type Server (Match s :> Run f desc) = T.Match T.Text -> Free f ()
+  route Proxy handler text = do
+    regex <- T.compileRegex $ symbolVal (Proxy :: Proxy s)
+    let match = text T.?=~ regex
+    if T.matched match
+      then Just $ iterM runAlgebra (handler match)
+      else Nothing
+
 instance (Read a, KnownSymbol tag, HasServer r) => HasServer (Capture a (tag :: Symbol) :> r) where
   type Server (Capture a tag :> r) = a -> Server r
   route Proxy handler text = do
@@ -107,6 +119,10 @@ instance (HasHelp a, HasHelp b) => HasHelp (a :<|> b) where
 
 instance (Functor f, KnownSymbol desc, Eval UserMonad f) => HasHelp (Run f (desc :: Symbol)) where
   help Proxy acc = acc <> " " <> (T.pack $ symbolVal (Proxy :: Proxy desc)) <> "\n"
+
+instance (Functor f, KnownSymbol s, KnownSymbol desc, Eval UserMonad f)
+  => HasHelp (Match (s::Symbol) :> (Run f (desc :: Symbol))) where
+  help Proxy acc = ""
 
 instance (KnownSymbol s, HasHelp r) => HasHelp ((s :: Symbol) :> r) where
   help Proxy acc =
