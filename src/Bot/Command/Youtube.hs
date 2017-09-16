@@ -9,28 +9,24 @@
 {-# LANGUAGE RecordWildCards #-}
 module Bot.Command.Youtube where
 
-import Bot.Command.Base
-import Bot.Command.Base.Types
-import Bot.Command.Types
-import Bot.Command.Youtube.Types
-import Bot.Types
-import Control.Monad.Free
-import System.Process.Typed
-import Data.UUID.V4
-import Data.UUID
-import Data.Monoid
-import Control.Concurrent.STM (atomically)
-import Control.Monad.IO.Class
-import System.Exit
-import qualified Data.Text as T
-import qualified Text.RE.Replace as R
-import qualified Text.RE.PCRE.ByteString.Lazy as R
+import           Bot.Command.Base
+import           Bot.Command.Base.Types
+import           Bot.Command.Types
+import           Bot.Command.Youtube.Types
+import           Bot.Types
+import           Control.Monad.Free
+import           Control.Monad.IO.Class
+import           Data.Monoid
+import           Data.UUID
+import           Data.UUID.V4
+import           System.Exit
+import           System.Process.Typed
+
 import qualified Data.ByteString.Lazy.Char8 as C
-import qualified Web.Telegram.API.Bot.Data as TG
-import qualified Web.Telegram.API.Bot.Responses as TG
+import qualified Data.Text as T
+import qualified Text.RE.PCRE.ByteString.Lazy as R
+import qualified Text.RE.Replace as R
 import qualified Web.Telegram.API.Bot.Requests as TG
-import qualified Web.Telegram.API.Bot.API as TG
-import qualified Web.Telegram.API.Bot.API.Updates as TG
 
 download :: (Functor f, MonadFree f m, Youtube :<: f) => T.Text -> m (Either T.Text FilePath)
 download url = liftF . inj $ Download url id
