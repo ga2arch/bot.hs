@@ -7,6 +7,7 @@ module Bot where
 import           Bot.Command
 import           Bot.Command.Feeder
 import           Bot.Command.Feeder.Types
+import           Bot.Command.Route
 import           Bot.Command.Types
 import           Bot.Types
 import           Control.Concurrent
