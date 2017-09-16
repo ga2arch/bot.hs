@@ -39,7 +39,7 @@ executable ga2bot
                      , http-types
                      , case-insensitive
                      , persistent
-                     , persistent-sqlite
+                     , persistent-postgresql
                      , persistent-template
                      , esqueleto
                      , resource-pool

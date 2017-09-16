@@ -117,7 +117,7 @@ listCommand = do
   if (null feeds)
     then send "You don't have any subscription"
     else do
-      let urls = map (\(entityVal -> (Feed url _ _)) -> url) feeds
+      let urls = map (\(entityVal -> (Feed url _)) -> url) feeds
       send $ "You are subscribed to: \n" <> T.intercalate "\n" urls
 
 unsubscribeCommand :: (?feederChan :: TChan FeederEvent) => T.Text -> Free (Base :+: Feeder) ()
@@ -169,7 +169,7 @@ feeder botConfig = do
                     (loadFeed feed)
                     (\ex -> onFeedError ex feed)
 
-   onFeedError ex feed@(entityVal -> Feed feedUrl _ _) = do
+   onFeedError ex feed@(entityVal -> Feed feedUrl _) = do
      liftIO $ print ex
      users <- loadUsersByFeed feed
      forM_ users $ \(entityVal -> User userId) ->
@@ -177,7 +177,7 @@ feeder botConfig = do
                             ("error processing feed: " <> feedUrl <> " unsubscribing")
      removeFeed feed
 
-   loadFeed feed@(entityVal -> (Feed feedUrl _ _)) = do
+   loadFeed feed@(entityVal -> (Feed feedUrl _)) = do
      manager <- asks fManager
      liftIO $ print $ "loading " ++ (T.unpack feedUrl)
      request <- liftIO $ parseRequest $ T.unpack feedUrl
@@ -187,7 +187,7 @@ feeder botConfig = do
        Nothing -> return ()
 
    processFeed feed (AtomFeed Atom.Feed{..}) = undefined
-   processFeed feed@(entityVal -> Feed feedUrl _ lastDate) (RSSFeed RSS.RSS{rssChannel=RSS.RSSChannel{..}}) = do
+   processFeed feed@(entityVal -> Feed feedUrl lastDate) (RSSFeed RSS.RSS{rssChannel=RSS.RSSChannel{..}}) = do
      case lastDate of
        Just date -> do
          users <- loadUsersByFeed feed
