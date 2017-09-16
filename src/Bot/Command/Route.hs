@@ -46,6 +46,7 @@ data Capture (a :: *) (tag :: Symbol)
 data Run a (desc :: Symbol)
 
 data Action = PushNamespace T.Text | PopNamespace T.Text
+run handler f = return $ iterM runAlgebra (f >> handler)
 
 class HasServer api where
   type Server api :: *
@@ -62,11 +63,9 @@ instance (HasServer a, HasServer b) => HasServer (a :<|> b) where
 
 instance (Functor f, Eval UserMonad f, Base :<: f) => HasServer (Run f (desc :: Symbol)) where
   type Server (Run f b) = Free f ()
-  route Proxy handler action ns text =
-    Just $ case action of
-             Just (PushNamespace ns) -> iterM runAlgebra (pushNamespace ns >> handler)
-             Just (PopNamespace  ns) -> iterM runAlgebra (popNamespace ns >> handler)
-             Nothing ->  iterM runAlgebra handler
+  route Proxy handler (Just (PushNamespace name)) ns text = run handler (pushNamespace name)
+  route Proxy handler (Just (PopNamespace  name)) ns text = run handler (popNamespace name)
+  route Proxy handler Nothing ns text = return $ iterM runAlgebra handler
 
 instance (KnownSymbol s, HasServer r) => HasServer ((s :: Symbol) :> r) where
   type Server (s :> r) = Server r
@@ -84,10 +83,10 @@ instance (KnownSymbol s, KnownSymbol desc, HasServer r)
       Just rest@(T.uncons -> Just ('/', "exit")) ->
         route (Proxy :: Proxy r) handler (Just $ PopNamespace prefix) ns rest
       Just rest@(T.uncons -> Just ('/', _)) ->
-        Just $ maybe (return ()) id $ route (Proxy :: Proxy r) handler action ns rest
+        return $ maybe (return ()) id $ route (Proxy :: Proxy r) handler action ns rest
       Just (T.uncons -> Nothing) ->
         route (Proxy :: Proxy r) handler (Just $ PushNamespace prefix) ns "/start"
-      Nothing | prefix == ns -> Just $ return ()
+      Nothing | prefix == ns -> return $ return ()
       Nothing -> Nothing
 
 instance {-# OVERLAPPING #-} (KnownSymbol s, KnownSymbol desc, Eval UserMonad f)
@@ -97,7 +96,7 @@ instance {-# OVERLAPPING #-} (KnownSymbol s, KnownSymbol desc, Eval UserMonad f)
     regex <- T.compileRegex $ symbolVal (Proxy :: Proxy s)
     let match = text T.?=~ regex
     if T.matched match
-      then Just $ iterM runAlgebra (handler match)
+      then return $ iterM runAlgebra (handler match)
       else Nothing
 
 instance (Read a, KnownSymbol tag, HasServer r) => HasServer (Capture a (tag :: Symbol) :> r) where
