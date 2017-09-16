@@ -144,10 +144,7 @@ instance (Read a, KnownSymbol tag, HasHelp r) => HasHelp (Capture a (tag :: Symb
     help (Proxy :: Proxy r) (acc <> " <" <> (T.pack $ symbolVal (Proxy :: Proxy tag)) <> ">")
 
 serve :: (HasServer layout) => Proxy layout -> Server layout -> T.Text -> T.Text -> UserMonad ()
-serve p h ns xs = do
-  let text = if ("/" `T.isPrefixOf` xs)
-             then ns <> xs
-             else xs
-  case route p h Nothing ns text of
-      Just m  -> m
-      Nothing -> return ()
+serve p h ns text@(T.uncons -> (Just ('/', _))) =
+  fromMaybe (return ()) $ route p h Nothing ns $ ns <> text
+serve p h ns text =
+  fromMaybe (return ()) $ route p h Nothing ns text
