@@ -30,7 +30,7 @@ type Commands =
   :<|> "/list" :> Run (Base :+: Feeder) "list all feed subscriptions"
   :<|> "/help" :> Run (Base) "show help"
   :<|> Match "(?:https?://)?(?:www\\.)?youtu(?:be\\.com/watch\\?(?:.*?&(?:amp;)?)?v=|\\.be/)([\\w\\-]+)(?:&(?:amp;)?[\\w\\?=]*)?"
-  :> Run (Base :+: Youtube) "match hello"
+  :> Run (Base :+: Youtube) ""
 
 handleCommands :: (?feederChan :: TChan FeederEvent) => Server Commands
 handleCommands = startCommand
@@ -44,6 +44,3 @@ handleCommands = startCommand
   helpCommand = send helpText
   startCommand = send "hola\nga2bot allows you to subscribe to feed rss and receive news\n\
                       \/help to see the list of available commands"
-  matchCommand match = do
-    let videoId = R.captureText [R.cp|1|] match
-    send "Downloading ..."
