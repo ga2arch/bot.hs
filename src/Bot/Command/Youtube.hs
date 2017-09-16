@@ -37,15 +37,13 @@ getTitle url = liftF . inj $ GetTitle url id
 youtubeCommand :: R.Match T.Text -> Free (Base :+: Youtube) ()
 youtubeCommand match = do
   let videoId = R.captureText [R.cp|1|] match
-  title <- getTitle videoId
-  case title of
+  send "Downloading .."
+  audioFilepath <- download videoId
+  case audioFilepath of
     Left e -> send e
-    Right t -> do
-      send $ "Downloading " <> t
-      audioFilepath <- download videoId
-      case audioFilepath of
-        Left e -> send e
-        Right path -> uploadAudio t path
+    Right path -> do
+      Right title <- getTitle videoId
+      uploadAudio title path
 
 instance Eval UserMonad Youtube where
   runAlgebra (Download videoId next) = do
