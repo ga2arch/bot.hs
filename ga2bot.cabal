@@ -55,3 +55,4 @@ executable ga2bot
                      , regex-with-pcre
                      , typed-process
                      , uuid
+                     , directory
