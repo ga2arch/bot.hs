@@ -87,7 +87,8 @@ instance (KnownSymbol s, KnownSymbol desc, HasServer r)
         Just $ maybe (return ()) id $ route (Proxy :: Proxy r) handler action ns rest
       Just (T.uncons -> Nothing) ->
         route (Proxy :: Proxy r) handler (Just $ PushNamespace prefix) ns "/start"
-      Nothing -> if prefix == ns then Just $ return () else Nothing
+      Nothing | prefix == ns -> Just $ return ()
+      Nothing -> Nothing
 
 instance {-# OVERLAPPING #-} (KnownSymbol s, KnownSymbol desc, Eval UserMonad f)
   => HasServer (Match (s :: Symbol) :> (Run f (desc :: Symbol))) where
