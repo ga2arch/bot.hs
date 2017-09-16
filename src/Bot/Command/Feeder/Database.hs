@@ -20,6 +20,10 @@ import Database.Persist
 import Database.Persist.Postgresql
 import Database.Persist.TH
 
+run f = do
+  pool <- asks fPool
+  liftSqlPersistMPool f pool
+
 initDb :: (MonadBaseControl IO m, MonadIO m) => m (Pool SqlBackend)
 initDb = runStderrLoggingT $ do
   pool <- createPostgresqlPool "postgresql://localhost/feeder?user=ga2bot" 5
@@ -29,26 +33,22 @@ initDb = runStderrLoggingT $ do
 updateLastDate :: (MonadReader FeederConfig m, MonadBaseControl IO m, MonadIO m)
                => Entity Feed -> UTCTime -> m ()
 updateLastDate feed date = do
-  pool <- asks fPool
-  flip runSqlPool pool $ update (entityKey feed) [FeedLastDate =. (Just date)]
+  run $ update (entityKey feed) [FeedLastDate =. (Just date)]
   return ()
 
 loadFeeds :: (MonadReader FeederConfig m, MonadBaseControl IO m, MonadIO m) => m ([Entity Feed])
 loadFeeds = do
-  pool <- asks fPool
-  feeds :: [Entity Feed] <- flip runSqlPool pool $ selectList [] []
+  feeds :: [Entity Feed] <- run $ selectList [] []
   return feeds
 
 loadFeedsByUser :: (MonadReader FeederConfig m, MonadBaseControl IO m, MonadIO m)
                => String -> m ([Entity Feed])
-loadFeedsByUser userId = do
-  pool <- asks fPool
-  feeds :: [Entity Feed] <- flip runSqlPool pool $ do
+loadFeedsByUser userId =
+  run $ do
     user <- selectFirst [UserUserId ==. userId] []
     case user of
       Just u -> feedsByUser u
       Nothing -> return []
-  return feeds
  where
   feedsByUser user = do
     subs <- selectList [SubscriptionUserId ==. (entityKey user)] []
@@ -57,10 +57,8 @@ loadFeedsByUser userId = do
 
 loadUsersByFeed :: (MonadReader FeederConfig m, MonadBaseControl IO m, MonadIO m)
                => Entity Feed -> m ([Entity User])
-loadUsersByFeed feed = do
-  pool <- asks fPool
-  users :: [Entity User] <- flip runSqlPool pool $ usersByFeed feed
-  return users
+loadUsersByFeed feed =
+  run $ usersByFeed feed
  where
    usersByFeed feed = do
      subs <- selectList [SubscriptionFeedId ==. (entityKey feed)] []
@@ -69,9 +67,8 @@ loadUsersByFeed feed = do
 
 addSubscription :: (MonadReader FeederConfig m, MonadBaseControl IO m, MonadIO m)
                 => String -> Text -> m (Key Subscription)
-addSubscription userId url = do
-  pool <- asks fPool
-  flip runSqlPool pool $ do
+addSubscription userId url =
+  run $ do
     user <- selectFirst [UserUserId ==. userId] []
     feed <- selectFirst [FeedUrl ==. url] []
     subscribe userId url (entityKey <$> user) (entityKey <$> feed)
@@ -94,18 +91,16 @@ addSubscription userId url = do
 
 removeSubscriptionsByUser :: (MonadReader FeederConfig m, MonadBaseControl IO m, MonadIO m)
                     => String -> m ()
-removeSubscriptionsByUser userId = do
-  pool <- asks fPool
-  flip runSqlPool pool $ do
+removeSubscriptionsByUser userId =
+  run $ do
     user <- selectFirst [UserUserId ==. userId] []
     when (isJust user) $
       deleteWhere [SubscriptionUserId ==. (entityKey $ fromJust user)]
 
 removeSubscription :: (MonadReader FeederConfig m, MonadBaseControl IO m, MonadIO m)
                     => String -> Text -> m ()
-removeSubscription userId url = do
-  pool <- asks fPool
-  flip runSqlPool pool $ do
+removeSubscription userId url =
+  run $ do
     user <- selectFirst [UserUserId ==. userId] []
     feed <- selectFirst [FeedUrl ==. url] []
     when (isJust user && isJust feed) $ do
@@ -117,8 +112,7 @@ removeSubscription userId url = do
 
 removeFeed :: (MonadReader FeederConfig m, MonadBaseControl IO m, MonadIO m)
            => Entity Feed -> m ()
-removeFeed feed = do
-  pool <- asks fPool
-  flip runSqlPool pool $ do
+removeFeed feed =
+  run $ do
     deleteWhere [SubscriptionFeedId ==. (entityKey feed)]
     deleteWhere [FeedId ==. (entityKey feed)]
