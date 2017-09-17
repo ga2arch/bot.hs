@@ -26,6 +26,7 @@ import           System.Process.Typed
 
 import qualified Data.ByteString.Lazy.Char8 as C
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import qualified Text.RE.PCRE.ByteString.Lazy as R
 import qualified Text.RE.Replace as R
 import qualified Web.Telegram.API.Bot.Requests as TG
@@ -49,7 +50,7 @@ youtubeCommand match = do
 instance Eval UserMonad Youtube where
   runAlgebra (Download videoId next) = do
     out <- liftIO $ youtubeDl videoId
-    next out
+    next (fmap T.unpack out)
 
   runAlgebra (GetTitle videoId next) = do
     out <- liftIO $ getTitle' videoId
@@ -81,6 +82,6 @@ youtubeDl videoId = do
       regex <- R.compileRegex "\\[ffmpeg\\] Destination: (.*?)\\n"
       let match = output R.?=~ regex
       if R.matched match
-        then return $ Right $ C.unpack $ R.captureText [R.cp|1|] match
+        then return $ Right $ T.decodeUtf8 $ C.toStrict $ R.captureText [R.cp|1|] match
         else return $ Left "error processing video"
-    ExitFailure code -> return $ Left $ T.pack $ C.unpack err
+    ExitFailure code -> return $ Left $ T.decodeUtf8 $ C.toStrict err
