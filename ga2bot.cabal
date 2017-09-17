@@ -69,3 +69,4 @@ executable ga2bot
                      , uuid
                      , directory
                      , filepath
+                     , timerep

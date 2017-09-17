@@ -20,23 +20,25 @@ import           Control.Concurrent.STM
 import           Control.Concurrent.STM.TChan
 import           Control.Monad.Catch
 import           Control.Monad.Free
-import Control.Monad.Logger
-import Data.Time.LocalTime
-import Data.Time.Format
+import           Control.Monad.Logger
 import           Control.Monad.Reader
 import           Control.Monad.Trans
 import           Data.Int
 import           Data.List
 import           Data.Maybe
 import           Data.Monoid
+import           Data.Time.Format
+import           Data.Time.LocalTime
+import           Data.Time.RFC3339
+import           Data.Time.RFC822
 import           Database.Persist (entityVal, Entity)
 import           Network.HTTP.Client
 import           Network.HTTP.Client.TLS
 import           Network.HTTP.Types.Header
 import           Network.URI
+import           System.Log.FastLogger
 import           Text.Feed.Import
 import           Text.Feed.Types
-import System.Log.FastLogger
 
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy as B
@@ -187,22 +189,33 @@ feeder botConfig = do
        Just content -> processFeed feed content
        Nothing -> return ()
 
-   processFeed feed (AtomFeed Atom.Feed{..}) = undefined
+   processFeed feed@(entityVal -> Feed feedUrl lastDate) (AtomFeed Atom.Feed{..}) = do
+     case lastDate of
+       Just date -> do
+         users <- loadUsersByFeed feed
+         let newItems = filter (\item -> (atomDate item) > (fromJust lastDate)) feedEntries
+         sendMessages users $
+           map (\item -> (T.pack $ Atom.txtToString $ Atom.entryTitle item,
+                          Atom.linkHref $ head $ Atom.entryLinks item)) newItems
+         when (not $ null newItems) $
+           updateLastDate feed $ from3339Date feedUpdated
+       Nothing -> when (not $ null feedEntries) $
+         updateLastDate feed $ from3339Date feedUpdated
+
    processFeed feed@(entityVal -> Feed feedUrl lastDate) (RSSFeed RSS.RSS{rssChannel=RSS.RSSChannel{..}}) = do
      case lastDate of
        Just date -> do
          users <- loadUsersByFeed feed
          let newItems = filter (\item -> (rssDate item) > (fromJust lastDate)) rssItems
-         sendMessages users newItems
+         sendMessages users $
+           map (\item -> (fromJust $ RSS.rssItemTitle item, fromJust $ RSS.rssItemLink item)) newItems
          when (not $ null newItems) $
            updateLastDate feed (last . sort $ map rssDate newItems)
        Nothing -> when (not $ null rssItems) $
          updateLastDate feed (last . sort $ map rssDate rssItems)
 
    sendMessages users rssItems = do
-     forM_ rssItems $ \RSS.RSSItem{..} -> do
-       let title = fromJust rssItemTitle
-       let url = fromJust rssItemLink
+     forM_ rssItems $ \(title, url) -> do
        let message = title <> "\n\n" <> url
        forM_ users $ \(entityVal -> User userId) ->
          call $ sendMessage (read userId) message
@@ -210,7 +223,14 @@ feeder botConfig = do
    rssGuid = RSS.rssGuidValue . fromJust . RSS.rssItemGuid
    rssDate x = do
      let pubDate = fromJust $ RSS.rssItemPubDate x
-     zonedTimeToUTC $ parseTimeOrError True defaultTimeLocale rfc822DateFormat (T.unpack pubDate)
+     from822Date pubDate
+
+   from822Date date = zonedTimeToUTC $ fromJust $ parseTimeRFC822 date
+   from3339Date date = zonedTimeToUTC $ fromJust $ parseTimeRFC3339 date
+
+   atomDate x = do
+     let pubDate = Atom.entryUpdated x
+     from3339Date pubDate
 
    call action = do
      config <- asks fTelegramConfig
