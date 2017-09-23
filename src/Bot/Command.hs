@@ -2,9 +2,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes #-}
 module Bot.Command where
 
 import           Bot.Command.Base
@@ -15,8 +13,6 @@ import           Bot.Command.Route
 import           Bot.Command.Types
 import           Bot.Command.Youtube
 import           Bot.Command.Youtube.Types
-import           Control.Concurrent.STM.TChan
-import           Data.Array (Array, (!))
 import           Data.Proxy
 import           Data.Text (Text, empty, pack)
 

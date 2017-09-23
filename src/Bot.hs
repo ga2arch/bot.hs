@@ -35,12 +35,8 @@ import qualified Web.Telegram.API.Bot.Requests as TG
 import qualified Web.Telegram.API.Bot.Responses as TG
 
 -- * Bot
-dispatch' :: forall event. (Typeable event) => Listeners -> event -> IO ()
-dispatch' listeners event = runD (dispatch event) listeners
-
 onUpdate :: TG.Update -> BotMonad ()
-onUpdate TG.Update{..} = do
-  onMessage message
+onUpdate TG.Update{..} = onMessage message
   where
    onMessage (Just message@TG.Message{..}) = onUser message from
    onMessage _ = return ()
@@ -49,25 +45,29 @@ onUpdate TG.Update{..} = do
      users <- asks botUsers
      user <- liftIO . atomically $ M.lookup user_id users
      case user of
-       Just userChan -> do
-         liftIO . atomically $ writeTChan userChan message
-         return ()
+       Just userChan -> void . liftIO . atomically $ writeTChan userChan message
        Nothing  -> do
-         botState <- ask
-         userChan <- liftIO $ newTChanIO
-         userNamespace <- liftIO $ newMVar T.empty
-         listeners <- asks botListeners
-         liftIO . forkIO $
-           runReaderT (runUser processMessage)
-           $ UserConfig userChan botState chatId userNamespace (dispatch' listeners)
+         config <- mkUser chatId
+         startUser config
          liftIO . atomically $ do
-           M.insert userChan user_id users
-           writeTChan userChan message
+           let chan = userChan config
+           M.insert chan user_id users
+           writeTChan chan message
+
          return ()
    onUser _ _ = return ()
 
-processMessage :: UserMonad ()
-processMessage = forever $ do
+   mkUser chatId = do
+     botState <- ask
+     userChan <- liftIO newTChanIO
+     userNamespace <- liftIO $ newMVar T.empty
+     listeners <- asks botListeners
+     return $ UserConfig userChan botState chatId userNamespace (dispatch' listeners)
+
+   startUser config = void . liftIO . forkIO $ userLoop config
+
+userLoop :: UserConfig -> IO ()
+userLoop userConfig = (flip runReaderT) userConfig $ runUser $ forever $ do
   inChan <- asks userChan
   m <- liftIO . atomically $ readTChan inChan
   go m
@@ -79,44 +79,61 @@ processMessage = forever $ do
 
   go x = return ()
 
-runBot tk = do
+register
+  :: (MonadReader BotConfig m, MonadIO m, Typeable event) =>
+     (TChan ChannelCmd -> IO (TChan event)) -> m ()
+register f = do
+  cmdChan <- asks botCmdChan
+  listeners <- asks botListeners
+
+  chan <- liftIO $ f cmdChan
+  liftIO $ addListener' listeners chan
+
+startChannel :: BotMonad ()
+startChannel = do
+  config <- asks channelConfig
+  chan <- asks botCmdChan
+
+  void . liftIO . forkIO . forever $ do
+    m <- atomically $ readTChan chan
+    evalTI config $ foldExpr sendChannel m
+
+runBot :: BotConfig -> BotMonad a -> IO a
+runBot config f = runReaderT (unBot f) config
+
+startBot :: T.Text -> IO b
+startBot tk = do
   let token = TG.Token ("bot" <> tk)
-
-  botCmdChan <- newTChanIO
   channelConfig <- mkTelegram token
-  feederChan <- feeder botCmdChan
-  botConfig <- mkBot channelConfig botCmdChan
+  botConfig <- mkBot channelConfig
 
-  runD (addListener feederChan) (botListeners botConfig)
+  runBot botConfig $ do
+    register feeder
+    startChannel
+    go token onUpdate
 
-  forkIO $ forever $ do
-    m <- atomically $ readTChan botCmdChan
-    evalTI channelConfig $ foldExpr sendChannel m
-
-  go token $ \message -> runReaderT (unBot $ onUpdate message) botConfig
  where
   go token f = do
-    manager <- newManager tlsManagerSettings
+    manager <- liftIO $ newManager tlsManagerSettings
     getUpdates token manager Nothing f
 
   getUpdates token manager lastId f = do
-    updates <- TG.getUpdates token lastId (Just 20) (Just 10) manager
+    updates <- liftIO $ TG.getUpdates token lastId (Just 20) (Just 10) manager
     case updates of
+      Right (TG.Response [] _) -> getUpdates token manager lastId f
       Right (TG.Response result _) -> do
         mapM_ f result
-        if (not $ null result)
-          then do
-            let (TG.Update {TG.update_id=lastId}) = last result
-            getUpdates token manager (Just $ lastId+1) f
-          else
-            getUpdates token manager lastId f
+        let (TG.Update {TG.update_id=lastId}) = last result
+        getUpdates token manager (Just $ lastId+1) f
+
       Left  x -> getUpdates token manager lastId f
 
   mkTelegram token = do
     manager <- newManager tlsManagerSettings
     return $ TelegramConfig manager token
 
-  mkBot channelConfig botCmdChan = do
+  mkBot channelConfig = do
     users <- M.newIO
     listener <- M.newIO
-    return $ BotConfig users channelConfig listener botCmdChan
+    chan <- newTChanIO
+    return $ BotConfig users channelConfig listener chan

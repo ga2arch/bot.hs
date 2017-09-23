@@ -4,35 +4,33 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Bot.Command.Feeder.Types where
 
-import           Bot.Command.Feeder.Database.Types
-import           Bot.Command.Types
 import Bot.Channel
-import           Bot.Types
-import           Control.Concurrent.STM.TChan
-import           Control.Monad.Base
-import           Control.Monad.Catch
-import           Control.Monad.Logger
-import           Control.Monad.Reader
-import           Control.Monad.Trans.Control
-import           Data.Int
-import           Data.Pool (Pool)
-import           Database.Persist.Sql (Entity)
-import           Database.Persist.Sql (SqlBackend)
-import           Network.HTTP.Client (Manager)
+import Bot.Command.Feeder.Database.Types
+import Bot.Command.Types
+import Bot.Types
+import Control.Concurrent.STM.TChan
+import Control.Monad.Base
+import Control.Monad.Catch
+import Control.Monad.Logger
+import Control.Monad.Reader
+import Control.Monad.Trans.Control
+import Data.Int
+import Data.Pool (Pool)
+import Data.Text
+import Database.Persist.Sql (Entity)
+import Database.Persist.Sql (SqlBackend)
+import Network.HTTP.Client (Manager)
 import System.Log.FastLogger
 
-import qualified Data.ByteString.Char8 as C
-import qualified Data.Text as T
-
 data FeederEvent = News String
-                 | SubscribeUrl Int64 T.Text
-                 | UnsubscribeUrl Int64 T.Text
+                 | SubscribeUrl Int64 Text
+                 | UnsubscribeUrl Int64 Text
                  | ListFeeds String (TChan FeederEvent)
                  | Feeds [Entity Feed]
 
-data Feeder next = Subscribe T.Text next
-                 | Unsubscribe T.Text next
-                 | Validate T.Text (Bool -> next)
+data Feeder next = Subscribe Text next
+                 | Unsubscribe Text next
+                 | Validate Text (Bool -> next)
                  | GetFeeds ([Entity Feed] -> next)
   deriving (Functor)
 

@@ -11,4 +11,4 @@ main = do
   home <- getHomeDirectory
   let tokenPath = home <> "/.token"
   token <- TIO.readFile tokenPath
-  runBot . head $ T.lines token
+  startBot . head $ T.lines token

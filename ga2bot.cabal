@@ -44,7 +44,6 @@ executable ga2bot
                      , http-client-tls
                      , stm-containers
                      , text
-                     , hedis
                      , feed >= 1.0
                      , bytestring
                      , exceptions

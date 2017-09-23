@@ -8,9 +8,9 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Bot.Command.Feeder where
 
+import           Bot.Channel
+import           Bot.Channel.Telegram
 import           Bot.Command.Base
-import Bot.Channel.Telegram
-import Bot.Channel.Types (inject)
 import           Bot.Command.Base.Types
 import           Bot.Command.Feeder.Database
 import           Bot.Command.Feeder.Database.Types
@@ -29,6 +29,7 @@ import           Data.Int
 import           Data.List
 import           Data.Maybe
 import           Data.Monoid
+import           Data.Text (Text)
 import           Data.Time.Format
 import           Data.Time.LocalTime
 import           Data.Time.RFC3339
@@ -47,24 +48,17 @@ import qualified Data.ByteString.Lazy as B
 import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import qualified Database.Redis as R
-import qualified STMContainers.Map as M
 import qualified Text.Atom.Feed as Atom
 import qualified Text.RSS.Syntax as RSS
 import qualified Text.RSS1.Syntax as RSS1
-import qualified Web.Telegram.API.Bot.API as TG
-import qualified Web.Telegram.API.Bot.API.Updates as TG
-import qualified Web.Telegram.API.Bot.Data as TG
-import qualified Web.Telegram.API.Bot.Requests as TG
-import qualified Web.Telegram.API.Bot.Responses as TG
 
-subscribe :: (Functor f, MonadFree f m, Feeder :<: f)=> T.Text -> m ()
+subscribe :: (Functor f, MonadFree f m, Feeder :<: f)=> Text -> m ()
 subscribe url = liftF . inj $ Subscribe url ()
 
-unsubscribe :: (Functor f, MonadFree f m, Feeder :<: f) => T.Text -> m ()
+unsubscribe :: (Functor f, MonadFree f m, Feeder :<: f) => Text -> m ()
 unsubscribe url = liftF . inj $ Unsubscribe url ()
 
-validate :: (Functor f, MonadFree f m, Feeder :<: f) => T.Text -> m Bool
+validate :: (Functor f, MonadFree f m, Feeder :<: f) => Text -> m Bool
 validate url = liftF . inj $ Validate url id
 
 getFeeds :: (Functor f, MonadFree f m, Feeder :<: f) => m ([Entity Bot.Command.Feeder.Database.Types.Feed])
@@ -130,7 +124,7 @@ unsubscribeCommand url = do
   unsubscribe url
   send "unsubscribed"
 
---feeder :: TChanIO (TChan FeederEvent)
+feeder :: TChan ChannelCmd -> IO (TChan FeederEvent)
 feeder chan = do
   pool <- initDb
   feederChan <- newTChanIO

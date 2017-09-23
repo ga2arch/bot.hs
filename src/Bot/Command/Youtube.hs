@@ -1,9 +1,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -17,6 +14,7 @@ import           Bot.Types
 import           Control.Monad.Free
 import           Control.Monad.IO.Class
 import           Data.Monoid
+import           Data.Text (Text)
 import           Data.UUID
 import           Data.UUID.V4
 import           System.Directory
@@ -31,11 +29,16 @@ import qualified Text.RE.PCRE.ByteString.Lazy as R
 import qualified Text.RE.Replace as R
 import qualified Web.Telegram.API.Bot.Requests as TG
 
+download :: (MonadFree f m, Youtube :<: f) => Text -> m (Either Text FilePath)
 download url = liftF . inj $ Download url id
+
+getTitle :: (MonadFree f m, Youtube :<: f) => Text -> m (Either Text Text)
 getTitle url = liftF . inj $ GetTitle url id
+
+cleanup :: (MonadFree f m, Youtube :<: f) => FilePath -> m ()
 cleanup filepath = liftF . inj $ Cleanup filepath ()
 
-youtubeCommand :: R.Match T.Text -> Free (Base :+: Youtube) ()
+youtubeCommand :: R.Match Text -> Free (Base :+: Youtube) ()
 youtubeCommand match = do
   let videoId = R.captureText [R.cp|1|] match
   send "Downloading .."

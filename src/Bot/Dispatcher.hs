@@ -44,4 +44,10 @@ dispatch event = do
       liftIO $ atomically $ writeTChan (fromJust $ cast chan) event
       return ()
 
+dispatch' :: forall event. (Typeable event) => Listeners -> event -> IO ()
+dispatch' listeners event = runD (dispatch event) listeners
+
+addListener' :: forall event. (Typeable event) => Listeners -> TChan event -> IO ()
+addListener' listener chan = runD (addListener chan) listener
+
 runD f m = runReaderT (unD f) m

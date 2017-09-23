@@ -5,29 +5,35 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Bot.Command.Base where
 
+import           Bot.Channel.Telegram
 import           Bot.Command.Base.Types
 import           Bot.Command.Types
-import Bot.Channel.Telegram
 import           Bot.Types
 import           Control.Concurrent.MVar
 import           Control.Concurrent.STM
 import           Control.Concurrent.STM.TChan
 import           Control.Monad.Free
 import           Control.Monad.Reader
-import Data.Monoid
-import Data.Maybe
+import           Data.Maybe
+import           Data.Monoid
+import           Data.Text (Text)
 
 import qualified Data.Text as T
 import qualified Web.Telegram.API.Bot.Data as TG
-import qualified Web.Telegram.API.Bot.Responses as TG
-import qualified Web.Telegram.API.Bot.Requests as TG
-import qualified Web.Telegram.API.Bot.API as TG
-import qualified Web.Telegram.API.Bot.API.Updates as TG
 
+send :: (MonadFree f m, Base :<: f) => Text -> m ()
 send text = liftF . inj $ Send text ()
+
+uploadAudio :: (MonadFree f m, Base :<: f) => Text -> FilePath -> m ()
 uploadAudio title filepath = liftF . inj $ UploadAudio title filepath ()
+
+prompt :: (MonadFree f m, Base :<: f) => Text -> m Text
 prompt name = liftF . inj $ Prompt name id
+
+pushNamespace :: (MonadFree f m, Base :<: f) => Text -> m ()
 pushNamespace name = liftF . inj $ PushNamespace name ()
+
+popNamespace :: (MonadFree f m, Base :<: f) => Text -> m ()
 popNamespace name = liftF . inj $ PopNamespace name ()
 
 instance Eval UserMonad Base where
