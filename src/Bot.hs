@@ -1,14 +1,19 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Bot where
 
+import           Bot.Channel
+import           Bot.Channel.Telegram
+import           Bot.Channel.Types
 import           Bot.Command
 import           Bot.Command.Feeder
 import           Bot.Command.Feeder.Types
 import           Bot.Command.Route
 import           Bot.Command.Types
+import           Bot.Dispatcher
 import           Bot.Types
 import           Control.Concurrent
 import           Control.Concurrent.MVar
@@ -16,6 +21,7 @@ import           Control.Concurrent.STM
 import           Control.Concurrent.STM.TChan
 import           Control.Monad.Reader
 import           Data.Monoid
+import           Data.Typeable
 import           Network.HTTP.Client
 import           Network.HTTP.Client.TLS
 
@@ -29,8 +35,11 @@ import qualified Web.Telegram.API.Bot.Requests as TG
 import qualified Web.Telegram.API.Bot.Responses as TG
 
 -- * Bot
-dispatch :: (?feederChan :: TChan FeederEvent) => TG.Update -> ReaderT BotConfig IO ()
-dispatch TG.Update{..} = do
+dispatch' :: forall event. (Typeable event) => Listeners -> event -> IO ()
+dispatch' listeners event = runD (dispatch event) listeners
+
+onUpdate :: TG.Update -> BotMonad ()
+onUpdate TG.Update{..} = do
   onMessage message
   where
    onMessage (Just message@TG.Message{..}) = onUser message from
@@ -47,15 +56,17 @@ dispatch TG.Update{..} = do
          botState <- ask
          userChan <- liftIO $ newTChanIO
          userNamespace <- liftIO $ newMVar T.empty
+         listeners <- asks botListeners
          liftIO . forkIO $
-           runReaderT (runUser processMessage)$ UserConfig userChan botState chatId userNamespace
+           runReaderT (runUser processMessage)
+           $ UserConfig userChan botState chatId userNamespace (dispatch' listeners)
          liftIO . atomically $ do
            M.insert userChan user_id users
            writeTChan userChan message
          return ()
    onUser _ _ = return ()
 
-processMessage :: (?feederChan :: TChan FeederEvent) => UserMonad ()
+processMessage :: UserMonad ()
 processMessage = forever $ do
   inChan <- asks userChan
   m <- liftIO . atomically $ readTChan inChan
@@ -68,31 +79,21 @@ processMessage = forever $ do
 
   go x = return ()
 
-sendMessage chatId text = do
-   TG.sendMessageM TG.SendMessageRequest {
-      message_chat_id = TG.ChatId chatId,
-      message_text = text,
-      message_parse_mode = Nothing,
-      message_disable_web_page_preview = Just True,
-      message_disable_notification = Nothing,
-      message_reply_to_message_id = Nothing,
-      message_reply_markup = Nothing
-      }
-
-call action = do
-  botConfig <- asks userBot
-  let config = channelConfig botConfig
-  liftIO $ TG.runClient action (tgToken config) (tgManager config)
-
 runBot tk = do
   let token = TG.Token ("bot" <> tk)
 
+  botCmdChan <- newTChanIO
   channelConfig <- mkTelegram token
-  feederChan <- feeder channelConfig
-  botConfig <- mkBot channelConfig
+  feederChan <- feeder botCmdChan
+  botConfig <- mkBot channelConfig botCmdChan
 
-  let ?feederChan = feederChan
-    in go token $ \message -> runReaderT (dispatch message) botConfig
+  runD (addListener feederChan) (botListeners botConfig)
+
+  forkIO $ forever $ do
+    m <- atomically $ readTChan botCmdChan
+    evalTI channelConfig $ foldExpr sendChannel m
+
+  go token $ \message -> runReaderT (unBot $ onUpdate message) botConfig
  where
   go token f = do
     manager <- newManager tlsManagerSettings
@@ -113,8 +114,9 @@ runBot tk = do
 
   mkTelegram token = do
     manager <- newManager tlsManagerSettings
-    return $ TelegramConfig token manager
+    return $ TelegramConfig manager token
 
-  mkBot channelConfig = do
+  mkBot channelConfig botCmdChan = do
     users <- M.newIO
-    return $ BotConfig users channelConfig
+    listener <- M.newIO
+    return $ BotConfig users channelConfig listener botCmdChan

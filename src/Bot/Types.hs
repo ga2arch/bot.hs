@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Bot.Types where
 
@@ -9,24 +10,29 @@ import           Control.Monad.Reader
 import           Data.Int
 import           Data.Text
 import           Network.HTTP.Client
+import Data.Typeable
+import Bot.Dispatcher
+import Bot.Channel.Telegram
+import Bot.Channel
 
 import qualified Web.Telegram.API.Bot.Data as TG
 import qualified Web.Telegram.API.Bot.API as TG
 import qualified STMContainers.Map as M
 
-
 data BotConfig = BotConfig { botUsers :: M.Map Int (TChan TG.Message)
                            , channelConfig :: TelegramConfig
+                           , botListeners :: Listeners
+                           , botCmdChan :: TChan ChannelCmd
                            }
 
-data TelegramConfig = TelegramConfig { tgToken :: TG.Token
-                                     , tgManager :: Manager
-                                     }
+newtype BotMonad a = BotMonad { unBot :: ReaderT BotConfig IO a }
+  deriving (Monad, Applicative, Functor, MonadReader BotConfig, MonadIO)
 
 data UserConfig = UserConfig { userChan :: TChan TG.Message
                              , userBot :: BotConfig
                              , userChatId :: Int64
                              , userNamespace :: MVar Text
+                             , userDispacher :: forall event. (Typeable event) => event -> IO ()
                              }
 
 

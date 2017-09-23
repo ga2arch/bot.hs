@@ -6,6 +6,7 @@ module Bot.Command.Feeder.Types where
 
 import           Bot.Command.Feeder.Database.Types
 import           Bot.Command.Types
+import Bot.Channel
 import           Bot.Types
 import           Control.Concurrent.STM.TChan
 import           Control.Monad.Base
@@ -29,15 +30,14 @@ data FeederEvent = News String
                  | ListFeeds String (TChan FeederEvent)
                  | Feeds [Entity Feed]
 
-data Feeder next = Subscribe (TChan FeederEvent) T.Text next
-                 | Unsubscribe (TChan FeederEvent) T.Text next
+data Feeder next = Subscribe T.Text next
+                 | Unsubscribe T.Text next
                  | Validate T.Text (Bool -> next)
-                 | GetFeeds (TChan FeederEvent) ([Entity Feed] -> next)
+                 | GetFeeds ([Entity Feed] -> next)
   deriving (Functor)
 
 data FeederConfig = FeederConfig { fPool :: Pool SqlBackend
-                                 , fTelegramConfig :: TelegramConfig
-                                 , fManager :: Manager
+                                 , fCmdChan :: TChan ChannelCmd
                                  , fLogOut :: LoggerSet
                                  }
 

@@ -31,6 +31,7 @@ executable ga2bot
                  , Bot.Types
   build-depends:       base >= 4.7 && < 5
                      , free >= 4.12
+                     , containers
                      , monad-loops >= 0.4
                      , natural-transformation >= 0.4
                      , comonad

@@ -45,7 +45,7 @@ type Commands =
   :<|> Matches
   :<|> "/help" :> Run (Base) "show help"
 
-handleFeederNamespace :: (?feederChan :: TChan FeederEvent) => Server FeederNamespace
+handleFeederNamespace :: Server FeederNamespace
 handleFeederNamespace =
   enterFeederCommand
   :<|> subscribeCommand
@@ -59,7 +59,7 @@ handleFeederNamespace =
    helpText = help (Proxy :: Proxy FeederCommands) empty
    helpCommand = send helpText
 
-handleCommands :: (?feederChan :: TChan FeederEvent) => Server Commands
+handleCommands :: Server Commands
 handleCommands = startCommand
   :<|> handleFeederNamespace
   :<|> youtubeCommand

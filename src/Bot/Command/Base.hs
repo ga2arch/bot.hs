@@ -7,6 +7,7 @@ module Bot.Command.Base where
 
 import           Bot.Command.Base.Types
 import           Bot.Command.Types
+import Bot.Channel.Telegram
 import           Bot.Types
 import           Control.Concurrent.MVar
 import           Control.Concurrent.STM
@@ -33,7 +34,7 @@ instance Eval UserMonad Base where
   runAlgebra (Send text next) = do
     bot <- asks userBot
     chatId <- asks userChatId
-    call $ sendMessage chatId text
+    liftIO $ sendMessage' chatId text (botCmdChan bot)
     next
 
   runAlgebra (PushNamespace name next) = do
@@ -49,45 +50,13 @@ instance Eval UserMonad Base where
   runAlgebra (UploadAudio title filepath next) = do
     bot <- asks userBot
     chatId <- asks userChatId
-    call $ uploadAudio chatId title filepath
+    liftIO $ uploadAudio' chatId title filepath (botCmdChan bot)
     next
-   where
-     uploadAudio chatId title filepath = do
-       TG.uploadAudioM TG.SendAudioRequest {
-         _audio_chat_id = TG.ChatId chatId,
-         _audio_audio = TG.FileUpload
-                        (Just "application/octet-stream") (TG.FileUploadFile filepath),
-         _audio_caption = Nothing,
-         _audio_duration = Nothing,
-         _audio_performer = Nothing,
-         _audio_title = Just title,
-         _audio_disable_notification = Nothing,
-         _audio_reply_to_message_id = Nothing,
-         _audio_reply_markup = Nothing
-      }
 
   runAlgebra (Prompt text next) = do
     bot <- asks userBot
     inChan <- asks userChan
     chatId <- asks userChatId
-    call $ sendMessage chatId text
-    TG.Message{chat=TG.Chat{chat_id=chatId}, text=Just text} <- liftIO . atomically
-      $ readTChan inChan
+    liftIO $ sendMessage' chatId text (botCmdChan bot)
+    TG.Message{chat=TG.Chat{chat_id=chatId}, text=Just text} <- liftIO . atomically $ readTChan inChan
     next text
-
-sendMessage chatId text = do
-  TG.sendMessageM TG.SendMessageRequest {
-    message_chat_id = TG.ChatId chatId,
-    message_text = text,
-    message_parse_mode = Nothing,
-    message_disable_web_page_preview = Just True,
-    message_disable_notification = Nothing,
-    message_reply_to_message_id = Nothing,
-    message_reply_markup = Nothing
-    }
-
-
-call action = do
-  botConfig <- asks userBot
-  let config = channelConfig botConfig
-  liftIO $ TG.runClient action (tgToken config) (tgManager config)
