@@ -25,21 +25,19 @@ import qualified Web.Telegram.API.Bot.API as TG
 import qualified Web.Telegram.API.Bot.Requests as TG
 
 instance (MonadIO m) => Channel TelegramMessage (TI m) where
-  sendChannel (SMR smr) = do
-    m <- asks tcManager
-    t <- asks tcToken
-    res <- liftIO $ TG.sendMessage t smr m
-    case res of
-      Left x -> throwError x
-      Right x -> return ()
+  sendChannel (SMR smr) = runTG TG.sendMessage smr
+  sendChannel (SAR sar) = runTG TG.uploadAudio sar
 
-  sendChannel (SAR sar) = do
-    m <- asks tcManager
-    t <- asks tcToken
-    res <- liftIO $ TG.uploadAudio t sar m
-    case res of
-      Left x -> throwError x
-      Right x -> return ()
+runTG
+  :: (MonadReader TelegramConfig m, MonadIO m, MonadError e m) =>
+     (TG.Token -> t1 -> Manager -> IO (Either e t)) -> t1 -> m ()
+runTG tgFun payload = do
+  manager <- asks tcManager
+  token <- asks tcToken
+  res <- liftIO $ tgFun token payload manager
+  case res of
+    Left x -> throwError x
+    Right x -> return ()
 
 evalTI :: TelegramConfig -> TI m a -> m (Either ServantError a)
 evalTI config e = runExceptT (runReaderT (runTI e) config)
