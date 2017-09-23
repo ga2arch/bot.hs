@@ -1,7 +1,6 @@
 module Bot.Channel where
 
-import Data.Text
 import Bot.Channel.Types
-import Bot.Channel.Telegram
+import Bot.Channel.Telegram.Types
 
 type ChannelCmd = Expr TelegramMessage

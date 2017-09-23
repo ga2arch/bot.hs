@@ -13,7 +13,6 @@ import           Bot.Command.Youtube.Types
 import           Bot.Types
 import           Control.Monad.Free
 import           Control.Monad.IO.Class
-import           Data.Monoid
 import           Data.Text (Text)
 import           Data.UUID
 import           Data.UUID.V4
@@ -27,7 +26,6 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Text.RE.PCRE.ByteString.Lazy as R
 import qualified Text.RE.Replace as R
-import qualified Web.Telegram.API.Bot.Requests as TG
 
 download :: (MonadFree f m, Youtube :<: f) => Text -> m (Either Text FilePath)
 download url = liftF . inj $ Download url id
@@ -64,13 +62,15 @@ instance Eval UserMonad Youtube where
     liftIO $ removeDirectoryRecursive dir
     next
 
+getTitle' :: MonadIO m => Text -> m (Either Text Text)
 getTitle' videoId = do
   let ydlConfig = proc "youtube-dl" ["-e", T.unpack videoId]
   (exitCode, output, err) <- readProcess ydlConfig
   case exitCode of
     ExitSuccess -> return $ Right $ T.pack $ C.unpack output
-    ExitFailure code -> return $ Left $ T.pack $ C.unpack err
+    ExitFailure _ -> return $ Left $ T.pack $ C.unpack err
 
+youtubeDl :: Text -> IO (Either Text Text)
 youtubeDl videoId = do
   uuid <- nextRandom
   let filename = "tmp/" ++ toString uuid ++ "/%(title)s.%(ext)s"
@@ -87,4 +87,4 @@ youtubeDl videoId = do
       if R.matched match
         then return $ Right $ T.decodeUtf8 $ C.toStrict $ R.captureText [R.cp|1|] match
         else return $ Left "error processing video"
-    ExitFailure code -> return $ Left $ T.decodeUtf8 $ C.toStrict err
+    ExitFailure _ -> return $ Left $ T.decodeUtf8 $ C.toStrict err

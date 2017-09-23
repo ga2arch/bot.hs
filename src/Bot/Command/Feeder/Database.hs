@@ -1,3 +1,6 @@
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
+{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
+
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE EmptyDataDecls             #-}
 {-# LANGUAGE FlexibleContexts           #-}
@@ -8,7 +11,6 @@ module Bot.Command.Feeder.Database where
 
 import Bot.Command.Feeder.Types
 import Bot.Command.Feeder.Database.Types
-import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Logger
 import Control.Monad.Reader
 import Control.Monad.Trans.Control
@@ -18,7 +20,6 @@ import Data.Text (Text)
 import Data.Time.Clock
 import Database.Persist
 import Database.Persist.Postgresql
-import Database.Persist.TH
 
 run f = do
   pool <- asks fPool
@@ -81,11 +82,11 @@ addSubscription userId url =
      feed <- insert $ Feed url Nothing
      insert $ Subscription  user feed
 
-   subscribe userId url (Just user) Nothing = do
+   subscribe _ url (Just user) Nothing = do
      feed <- insert $ Feed url Nothing
      insert $ Subscription user feed
 
-   subscribe userId url Nothing (Just feed) = do
+   subscribe userId _ Nothing (Just feed) = do
      user <- insert $ User userId
      insert $ Subscription user feed
 

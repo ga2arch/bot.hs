@@ -6,13 +6,9 @@ module Bot.Dispatcher where
 
 import Control.Monad.State
 import Control.Monad.Reader
-import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Concurrent.STM.TChan
-import Control.Monad.Trans.Class
 import Data.Typeable
 import Data.Maybe
-import Data.Proxy
 import qualified STMContainers.Map as M
 
 type Listeners = M.Map TypeRep Listener

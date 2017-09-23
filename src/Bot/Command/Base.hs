@@ -11,7 +11,6 @@ import           Bot.Command.Types
 import           Bot.Types
 import           Control.Concurrent.MVar
 import           Control.Concurrent.STM
-import           Control.Concurrent.STM.TChan
 import           Control.Monad.Free
 import           Control.Monad.Reader
 import           Data.Maybe
@@ -64,5 +63,5 @@ instance Eval UserMonad Base where
     inChan <- asks userChan
     chatId <- asks userChatId
     liftIO $ sendMessage' chatId text (botCmdChan bot)
-    TG.Message{chat=TG.Chat{chat_id=chatId}, text=Just text} <- liftIO . atomically $ readTChan inChan
-    next text
+    TG.Message{text=Just answer} <- liftIO . atomically $ readTChan inChan
+    next answer

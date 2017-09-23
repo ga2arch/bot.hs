@@ -14,11 +14,7 @@ import           Bot.Command.Types
 import           Bot.Command.Youtube
 import           Bot.Command.Youtube.Types
 import           Data.Proxy
-import           Data.Text (Text, empty, pack)
-
-import qualified Text.RE.PCRE as R
-import qualified Text.RE.PCRE.Text as R
-import qualified Text.RE.Replace as R
+import           Data.Text (Text, empty)
 
 type Matches = Match
   "(?:https?://)?(?:www\\.)?youtu(?:be\\.com/watch\\?(?:.*?&(?:amp;)?)?v=|\\.be/)([\\w\\-]+)(?:&(?:amp;)?[\\w\\?=]*)?"

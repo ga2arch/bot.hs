@@ -7,18 +7,15 @@ module Bot where
 
 import           Bot.Channel
 import           Bot.Channel.Telegram
+import           Bot.Channel.Telegram.Types
 import           Bot.Channel.Types
 import           Bot.Command
 import           Bot.Command.Feeder
-import           Bot.Command.Feeder.Types
 import           Bot.Command.Route
-import           Bot.Command.Types
 import           Bot.Dispatcher
 import           Bot.Types
 import           Control.Concurrent
-import           Control.Concurrent.MVar
 import           Control.Concurrent.STM
-import           Control.Concurrent.STM.TChan
 import           Control.Monad.Reader
 import           Data.Monoid
 import           Data.Typeable
@@ -29,32 +26,29 @@ import qualified Data.Proxy as P
 import qualified Data.Text as T
 import qualified STMContainers.Map as M
 import qualified Web.Telegram.API.Bot.API as TG
-import qualified Web.Telegram.API.Bot.API.Updates as TG
 import qualified Web.Telegram.API.Bot.Data as TG
-import qualified Web.Telegram.API.Bot.Requests as TG
 import qualified Web.Telegram.API.Bot.Responses as TG
 
 -- * Bot
 onUpdate :: TG.Update -> BotMonad ()
 onUpdate TG.Update{..} = onMessage message
   where
-   onMessage (Just message@TG.Message{..}) = onUser message from
+   onMessage (Just msg@TG.Message{..}) = onUser msg from
    onMessage _ = return ()
 
-   onUser message@TG.Message{chat=TG.Chat{chat_id=chatId}} (Just TG.User{..}) = do
+   onUser msg@TG.Message{chat=TG.Chat{chat_id=chatId}} (Just TG.User{..}) = do
      users <- asks botUsers
      user <- liftIO . atomically $ M.lookup user_id users
      case user of
-       Just userChan -> void . liftIO . atomically $ writeTChan userChan message
+       Just userChan -> void . liftIO . atomically $ writeTChan userChan msg
        Nothing  -> do
          config <- mkUser chatId
          startUser config
-         liftIO . atomically $ do
+         void . liftIO . atomically $ do
            let chan = userChan config
            M.insert chan user_id users
-           writeTChan chan message
+           writeTChan chan msg
 
-         return ()
    onUser _ _ = return ()
 
    mkUser chatId = do
@@ -72,12 +66,12 @@ userLoop userConfig = (flip runReaderT) userConfig $ runUser $ forever $ do
   m <- liftIO . atomically $ readTChan inChan
   go m
  where
-  go TG.Message{chat=TG.Chat{chat_id=chatId}, text=Just text} = do
+  go TG.Message{text=Just text} = do
     namespace <- asks userNamespace
     ns <- liftIO $ readMVar namespace
     serve (P.Proxy :: P.Proxy Commands) handleCommands ns text
 
-  go x = return ()
+  go _ = return ()
 
 register
   :: (MonadReader BotConfig m, MonadIO m, Typeable event) =>
@@ -123,10 +117,10 @@ startBot tk = do
       Right (TG.Response [] _) -> getUpdates token manager lastId f
       Right (TG.Response result _) -> do
         mapM_ f result
-        let (TG.Update {TG.update_id=lastId}) = last result
-        getUpdates token manager (Just $ lastId+1) f
+        let (TG.Update {TG.update_id=newLastId}) = last result
+        getUpdates token manager (Just $ newLastId+1) f
 
-      Left  x -> getUpdates token manager lastId f
+      Left _ -> getUpdates token manager lastId f
 
   mkTelegram token = do
     manager <- newManager tlsManagerSettings

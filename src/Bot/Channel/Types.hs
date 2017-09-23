@@ -7,7 +7,6 @@
 {-# LANGUAGE DataKinds #-}
 module Bot.Channel.Types where
 
-import Data.Text
 import Bot.Command.Types
 
 data Expr f = In (f (Expr f ))

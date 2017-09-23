@@ -3,20 +3,16 @@
 module Bot.Types where
 
 import           Bot.Channel
-import           Bot.Channel.Telegram
+import           Bot.Channel.Telegram.Types
 import           Bot.Dispatcher
 import           Control.Concurrent.MVar
 import           Control.Concurrent.STM
-import           Control.Concurrent.STM.TChan
-import           Control.Monad
 import           Control.Monad.Reader
 import           Data.Int
 import           Data.Text
 import           Data.Typeable
-import           Network.HTTP.Client
 
 import qualified Web.Telegram.API.Bot.Data as TG
-import qualified Web.Telegram.API.Bot.API as TG
 import qualified STMContainers.Map as M
 
 data BotConfig = BotConfig { botUsers :: M.Map Int (TChan TG.Message)

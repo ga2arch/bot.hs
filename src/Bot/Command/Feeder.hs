@@ -19,18 +19,14 @@ import           Bot.Command.Types
 import           Bot.Types
 import           Control.Concurrent
 import           Control.Concurrent.STM
-import           Control.Concurrent.STM.TChan
 import           Control.Monad.Catch
 import           Control.Monad.Free
 import           Control.Monad.Logger
 import           Control.Monad.Reader
-import           Control.Monad.Trans
-import           Data.Int
 import           Data.List
 import           Data.Maybe
 import           Data.Monoid
 import           Data.Text (Text)
-import           Data.Time.Format
 import           Data.Time.LocalTime
 import           Data.Time.RFC3339
 import           Data.Time.RFC822
@@ -44,13 +40,9 @@ import           Text.Feed.Import
 import           Text.Feed.Types
 
 import qualified Data.ByteString.Char8 as C
-import qualified Data.ByteString.Lazy as B
-import qualified Data.CaseInsensitive as CI
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import qualified Text.Atom.Feed as Atom
 import qualified Text.RSS.Syntax as RSS
-import qualified Text.RSS1.Syntax as RSS1
 
 subscribe :: (Functor f, MonadFree f m, Feeder :<: f)=> Text -> m ()
 subscribe url = liftF . inj $ Subscribe url ()
@@ -66,14 +58,12 @@ getFeeds = liftF . inj $ GetFeeds id
 
 instance Eval UserMonad Feeder where
   runAlgebra (Subscribe url next) = do
-    config <- ask
     userId <- asks userChatId
     dispatcher <- asks userDispacher
     liftIO $ dispatcher (SubscribeUrl userId url)
     next
 
   runAlgebra (Unsubscribe url next) = do
-    config <- ask
     userId <- asks userChatId
     dispatcher <- asks userDispacher
     liftIO $ dispatcher (UnsubscribeUrl userId url)
@@ -125,40 +115,31 @@ unsubscribeCommand url = do
   send "unsubscribed"
 
 feeder :: TChan ChannelCmd -> IO (TChan FeederEvent)
-feeder chan = do
+feeder cmdChan = do
   pool <- initDb
   feederChan <- newTChanIO
-  manager <- newManager tlsManagerSettings
   logOut <- newStdoutLoggerSet defaultBufSize
-  let feederConfig = FeederConfig pool chan logOut
+  let feederConfig = FeederConfig pool cmdChan logOut
 
-  liftIO . forkIO . forever $ do
+  void . liftIO . forkIO . forever $ do
     event <- atomically $ readTChan feederChan
     runReaderT (runFeeder (case event of
       SubscribeUrl userId url -> onSubscribe userId url
       ListFeeds userId chan -> onListFeeds userId chan
-      UnsubscribeUrl userId url ->  onUnsubscribe userId url)) feederConfig
+      UnsubscribeUrl userId url ->  onUnsubscribe userId url
+      _ -> return ())) feederConfig
 
-  liftIO . forkIO . forever $ do
+  void . liftIO . forkIO . forever $ do
     runReaderT (runFeeder checkFeeds) feederConfig
     threadDelay 60000000
 
   return feederChan
   where
-   onSubscribe userId url = do
-     let url' = T.encodeUtf8 url
-     addSubscription (show userId) url
-     return ()
-
-   onUnsubscribe userId url = do
-     let url' = T.encodeUtf8 url
-     removeSubscription (show userId) url
-     return ()
-
+   onSubscribe userId url = void $ addSubscription (show userId) url
+   onUnsubscribe userId url = void $ removeSubscription (show userId) url
    onListFeeds userId chan = do
      feeds <- loadFeedsByUser userId
-     liftIO . atomically $ writeTChan chan (Feeds feeds)
-     return ()
+     void . liftIO . atomically $ writeTChan chan (Feeds feeds)
 
    checkFeeds = do
      $(logDebug) "checking feed"
@@ -185,11 +166,11 @@ feeder chan = do
        Just content -> processFeed feed content
        Nothing -> return ()
 
-   processFeed feed@(entityVal -> Feed feedUrl lastDate) (AtomFeed Atom.Feed{..}) = do
+   processFeed feed@(entityVal -> Feed _ lastDate) (AtomFeed Atom.Feed{..}) = do
      case lastDate of
        Just date -> do
          users <- loadUsersByFeed feed
-         let newItems = filter (\item -> (atomDate item) > (fromJust lastDate)) feedEntries
+         let newItems = filter (\item -> (atomDate item) > date) feedEntries
          sendMessages users $
            map (\item -> (T.pack $ Atom.txtToString $ Atom.entryTitle item,
                           Atom.linkHref $ head $ Atom.entryLinks item)) newItems
@@ -198,11 +179,11 @@ feeder chan = do
        Nothing -> when (not $ null feedEntries) $
          updateLastDate feed $ from3339Date feedUpdated
 
-   processFeed feed@(entityVal -> Feed feedUrl lastDate) (RSSFeed RSS.RSS{rssChannel=RSS.RSSChannel{..}}) = do
+   processFeed feed@(entityVal -> Feed _ lastDate) (RSSFeed RSS.RSS{rssChannel=RSS.RSSChannel{..}}) = do
      case lastDate of
        Just date -> do
          users <- loadUsersByFeed feed
-         let newItems = filter (\item -> (rssDate item) > (fromJust lastDate)) rssItems
+         let newItems = filter (\item -> (rssDate item) > date) rssItems
          sendMessages users $
            map (\item -> (fromJust $ RSS.rssItemTitle item, fromJust $ RSS.rssItemLink item)) newItems
          when (not $ null newItems) $
@@ -210,13 +191,14 @@ feeder chan = do
        Nothing -> when (not $ null rssItems) $
          updateLastDate feed (last . sort $ map rssDate rssItems)
 
+   processFeed _ _ = return ()
+
    sendMessages users rssItems = do
      forM_ rssItems $ \(title, url) -> do
        let message = title <> "\n\n" <> url
        forM_ users $ \(entityVal -> User userId) ->
          sendMessage (read userId) message
 
-   rssGuid = RSS.rssGuidValue . fromJust . RSS.rssItemGuid
    rssDate x = do
      let pubDate = fromJust $ RSS.rssItemPubDate x
      from822Date pubDate

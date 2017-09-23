@@ -6,8 +6,6 @@ module Bot.Command.Feeder.Types where
 
 import Bot.Channel
 import Bot.Command.Feeder.Database.Types
-import Bot.Command.Types
-import Bot.Types
 import Control.Concurrent.STM.TChan
 import Control.Monad.Base
 import Control.Monad.Catch
@@ -19,7 +17,6 @@ import Data.Pool (Pool)
 import Data.Text
 import Database.Persist.Sql (Entity)
 import Database.Persist.Sql (SqlBackend)
-import Network.HTTP.Client (Manager)
 import System.Log.FastLogger
 
 data FeederEvent = News String

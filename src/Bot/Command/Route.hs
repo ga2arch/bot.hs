@@ -20,13 +20,10 @@ import           Bot.Command.Base.Types (Base)
 import           Bot.Command.Types
 import           Bot.Types
 import           Control.Applicative
-import           Control.Concurrent.STM.TChan
 import           Control.Monad.Free
-import           Control.Monad.Reader
 import           Data.Maybe
 import           Data.Monoid
 import           Data.Proxy
-import           Data.Text (Text)
 import           GHC.TypeLits
 import           Text.Read
 
@@ -46,6 +43,8 @@ data Capture (a :: *) (tag :: Symbol)
 data Run a (desc :: Symbol)
 
 data Action = PushNamespace T.Text | PopNamespace T.Text
+
+run :: (Eval m f, Monad m1) => Free f a1 -> Free f a -> m1 (m a1)
 run handler f = return $ iterM runAlgebra (f >> handler)
 
 class HasServer api where
@@ -63,9 +62,9 @@ instance (HasServer a, HasServer b) => HasServer (a :<|> b) where
 
 instance (Functor f, Eval UserMonad f, Base :<: f) => HasServer (Run f (desc :: Symbol)) where
   type Server (Run f b) = Free f ()
-  route Proxy handler (Just (PushNamespace name)) ns text = run handler (pushNamespace name)
-  route Proxy handler (Just (PopNamespace  name)) ns text = run handler (popNamespace name)
-  route Proxy handler Nothing ns text = return $ iterM runAlgebra handler
+  route Proxy handler (Just (PushNamespace name)) _ _ = run handler (pushNamespace name)
+  route Proxy handler (Just (PopNamespace  name)) _ _ = run handler (popNamespace name)
+  route Proxy handler Nothing _ _ = return $ iterM runAlgebra handler
 
 instance (KnownSymbol s, HasServer r) => HasServer ((s :: Symbol) :> r) where
   type Server (s :> r) = Server r
@@ -92,7 +91,7 @@ instance (KnownSymbol s, KnownSymbol desc, HasServer r)
 instance {-# OVERLAPPING #-} (KnownSymbol s, KnownSymbol desc, Eval UserMonad f)
   => HasServer (Match (s :: Symbol) :> (Run f (desc :: Symbol))) where
   type Server (Match s :> Run f desc) = T.Match T.Text -> Free f ()
-  route Proxy handler action ns text = do
+  route Proxy handler _ _ text = do
     regex <- T.compileRegex $ symbolVal (Proxy :: Proxy s)
     let match = text T.?=~ regex
     if T.matched match
@@ -126,7 +125,7 @@ instance (Functor f, KnownSymbol desc, Eval UserMonad f) => HasHelp (Run f (desc
 
 instance (Functor f, KnownSymbol s, KnownSymbol desc, Eval UserMonad f)
   => HasHelp (Match (s::Symbol) :> (Run f (desc :: Symbol))) where
-  help Proxy acc = ""
+  help Proxy _ = ""
 
 instance (KnownSymbol s, KnownSymbol d, HasHelp r)
   => HasHelp ((NS (s :: Symbol) (d :: Symbol)) :> r) where

@@ -12,10 +12,7 @@ import           Bot.Channel.Types
 import           Bot.Command.Types
 import           Control.Concurrent.STM
 import           Control.Monad.Except
-import           Control.Monad.IO.Class
 import           Control.Monad.Reader
-import           Control.Monad.Trans.Class
-import           Control.Monad.Trans.Except
 import           Data.Int
 import           Data.Text
 import           Network.HTTP.Client
@@ -37,7 +34,7 @@ runTG tgFun payload = do
   res <- liftIO $ tgFun token payload manager
   case res of
     Left x -> throwError x
-    Right x -> return ()
+    Right _ -> return ()
 
 evalTI :: TelegramConfig -> TI m a -> m (Either ServantError a)
 evalTI config e = runExceptT (runReaderT (runTI e) config)
