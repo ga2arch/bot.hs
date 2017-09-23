@@ -84,7 +84,7 @@ instance (KnownSymbol s, KnownSymbol desc, HasServer r)
         route (Proxy :: Proxy r) handler (Just $ PopNamespace prefix) ns rest
       Just rest@(T.uncons -> Just ('/', _)) ->
         return $ maybe (return ()) id $ route (Proxy :: Proxy r) handler action ns rest
-      Just (T.uncons -> Nothing) ->
+      Just (T.uncons -> _) ->
         route (Proxy :: Proxy r) handler (Just $ PushNamespace prefix) ns "/start"
       Nothing | prefix == ns -> return $ return ()
       Nothing -> Nothing
