@@ -2,6 +2,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Bot.Types where
 
+import           Bot.Channel
+import           Bot.Channel.Telegram
+import           Bot.Dispatcher
 import           Control.Concurrent.MVar
 import           Control.Concurrent.STM
 import           Control.Concurrent.STM.TChan
@@ -9,11 +12,8 @@ import           Control.Monad
 import           Control.Monad.Reader
 import           Data.Int
 import           Data.Text
+import           Data.Typeable
 import           Network.HTTP.Client
-import Data.Typeable
-import Bot.Dispatcher
-import Bot.Channel.Telegram
-import Bot.Channel
 
 import qualified Web.Telegram.API.Bot.Data as TG
 import qualified Web.Telegram.API.Bot.API as TG
@@ -34,7 +34,6 @@ data UserConfig = UserConfig { userChan :: TChan TG.Message
                              , userNamespace :: MVar Text
                              , userDispacher :: forall event. (Typeable event) => event -> IO ()
                              }
-
 
 newtype UserMonad a = UserMonad { runUser :: ReaderT UserConfig IO a }
   deriving (Monad, Applicative, Functor, MonadReader UserConfig, MonadIO)

@@ -7,34 +7,22 @@
 {-# LANGUAGE RecordWildCards #-}
 module Bot.Channel.Telegram where
 
-import Bot.Channel.Types
-import Bot.Command.Types
-import Data.Text
-import Data.Int
-import Control.Concurrent.STM
-import Control.Monad.Reader
-import Control.Monad.IO.Class
-import Control.Monad.Except
-import Control.Monad.Trans.Except
-import Control.Monad.Trans.Class
-import Network.HTTP.Client
-import Servant.Common.Req (ServantError)
-import qualified Web.Telegram.API.Bot.Requests as TG
+import           Bot.Channel.Telegram.Types
+import           Bot.Channel.Types
+import           Bot.Command.Types
+import           Control.Concurrent.STM
+import           Control.Monad.Except
+import           Control.Monad.IO.Class
+import           Control.Monad.Reader
+import           Control.Monad.Trans.Class
+import           Control.Monad.Trans.Except
+import           Data.Int
+import           Data.Text
+import           Network.HTTP.Client
+import           Servant.Common.Req (ServantError)
+
 import qualified Web.Telegram.API.Bot.API as TG
-
-data TelegramMessage a = SMR TG.SendMessageRequest
-                       | SVR (TG.SendVideoRequest Text)
-                       | SAR (TG.SendAudioRequest TG.FileUpload)
-  deriving (Functor)
-
-data TelegramConfig = TelegramConfig
-  { tcManager :: Manager
-  , tcToken :: TG.Token
-  }
-
-newtype TI m a = TI { runTI :: ReaderT TelegramConfig (ExceptT ServantError m) a }
-  deriving (Monad, Applicative, Functor, MonadIO,
-            MonadReader TelegramConfig, MonadError ServantError)
+import qualified Web.Telegram.API.Bot.Requests as TG
 
 instance (MonadIO m) => Channel TelegramMessage (TI m) where
   sendChannel (SMR smr) = do
@@ -53,6 +41,7 @@ instance (MonadIO m) => Channel TelegramMessage (TI m) where
       Left x -> throwError x
       Right x -> return ()
 
+evalTI :: TelegramConfig -> TI m a -> m (Either ServantError a)
 evalTI config e = runExceptT (runReaderT (runTI e) config)
 
 sendMessage' :: (TelegramMessage :<: f) => Int64 -> Text -> TChan (Expr f) -> IO ()

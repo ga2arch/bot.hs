@@ -23,9 +23,6 @@ data Listener where
 newtype Dispatcher a = D { unD :: ReaderT Listeners IO a }
   deriving (Monad, Functor, Applicative, MonadReader Listeners, MonadIO)
 
-mkListener :: forall event. (Typeable event) => event -> TChan event -> Listener
-mkListener event chan = Listener (typeOf event) chan
-
 addListener :: forall event. (Typeable event) => TChan event -> Dispatcher ()
 addListener chan = do
   listeners <- ask
@@ -50,4 +47,5 @@ dispatch' listeners event = runD (dispatch event) listeners
 addListener' :: forall event. (Typeable event) => Listeners -> TChan event -> IO ()
 addListener' listener chan = runD (addListener chan) listener
 
+runD :: Dispatcher a -> Listeners -> IO a
 runD f m = runReaderT (unD f) m
